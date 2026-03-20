@@ -1,0 +1,10 @@
+requests
+beautifulsoup4
+pandas
+numpy
+scikit-learn
+joblib
+Flask
+Werkzeug
+lxml
+xgboost

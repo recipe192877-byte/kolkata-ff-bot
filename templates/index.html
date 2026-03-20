@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KFF Predictor | Premium AI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-base: #020617;
+            --primary: #3b82f6;
+            --primary-glow: rgba(59, 130, 246, 0.6);
+            --secondary: #8b5cf6;
+            --accent: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass-bg: rgba(15, 23, 42, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem 1.5rem;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background Blobs */
+        .blob-1, .blob-2 {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: -1;
+            animation: float 10s ease-in-out infinite alternate;
+        }
+
+        .blob-1 {
+            top: 5%;
+            left: -10%;
+            width: 300px;
+            height: 300px;
+            background: var(--primary-glow);
+        }
+
+        .blob-2 {
+            bottom: 10%;
+            right: -10%;
+            width: 400px;
+            height: 400px;
+            background: rgba(139, 92, 246, 0.4);
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0) scale(1); }
+            100% { transform: translateY(30px) scale(1.1); }
+        }
+
+        .container {
+            max-width: 550px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 1.8rem;
+            z-index: 10;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 0.5rem;
+            animation: fadeInDown 0.8s ease-out;
+        }
+
+        .header h1 {
+            font-size: 2.8rem;
+            font-weight: 900;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #60a5fa, #d8b4fe, #10b981);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.2rem;
+            filter: drop-shadow(0 4px 10px rgba(96, 165, 250, 0.3));
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 300;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            animation: fadeInUp 0.8s ease-out both;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(255,255,255,0.15);
+        }
+
+        .bazi-label {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 1.5rem;
+            font-weight: 700;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .bazi-label::before, .bazi-label::after {
+            content: '';
+            height: 2px;
+            width: 40px;
+            background: linear-gradient(90deg, transparent, var(--primary));
+        }
+        .bazi-label::after {
+            background: linear-gradient(270deg, transparent, var(--primary));
+        }
+
+        .prediction-numbers {
+            font-size: 4.5rem;
+            font-weight: 900;
+            color: #fff;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+        }
+
+        .prediction-numbers span {
+            background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
+            padding: 0 1.5rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.15);
+            box-shadow: inset 0 2px 20px rgba(255,255,255,0.05), 0 10px 30px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .prediction-numbers span::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%; width: 50%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transform: skewX(-20deg);
+            animation: shine 4s infinite;
+        }
+
+        @keyframes shine {
+            0% { left: -100%; }
+            20% { left: 200%; }
+            100% { left: 200%; }
+        }
+
+        .probabilities {
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            margin-top: 2rem;
+        }
+
+        .prob-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #e2e8f0;
+        }
+
+        .prob-track {
+            height: 12px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.05);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .prob-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), #93c5fd);
+            border-radius: 6px;
+            transition: width 1.5s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+        }
+
+        .prob-fill::after {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: moveLight 2s infinite linear;
+        }
+
+        @keyframes moveLight {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .prob-fill.alt {
+            background: linear-gradient(90deg, var(--secondary), #c4b5fd);
+        }
+
+        .action-btn {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 1.2rem;
+            border-radius: 16px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px var(--primary-glow);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.8rem;
+            text-transform: uppercase;
+            animation: pulse-glow 3s infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4); }
+            100% { box-shadow: 0 10px 40px rgba(139, 92, 246, 0.6); }
+        }
+
+        .action-btn:hover {
+            transform: translateY(-3px) scale(1.02);
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+        }
+
+        .action-btn:active {
+            transform: translateY(1px);
+        }
+
+        .action-btn:disabled {
+            background: #334155;
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+            animation: none;
+        }
+
+        .loader {
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255,255,255,0.2);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Rich Risk Management Box */
+        .risk-box {
+            position: relative;
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.8), rgba(2, 6, 23, 0.9));
+            border-radius: 20px;
+            padding: 1.5rem;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            overflow: hidden;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .risk-box::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 6px;
+            background: var(--accent); /* changes dynamically */
+            transition: background 0.5s ease;
+        }
+
+        .signal-header {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 0.3rem;
+        }
+
+        .signal-level {
+            font-size: 1.8rem;
+            font-weight: 900;
+            margin: 0.2rem 0;
+            text-transform: uppercase;
+            letter-spacing: -0.5px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        .signal-action {
+            display: inline-block;
+            background: rgba(255,255,255,0.1);
+            padding: 0.4rem 1.2rem;
+            border-radius: 20px;
+            font-size: 1rem;
+            font-weight: 700;
+            margin: 0.5rem 0 0.8rem 0;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .signal-reason {
+            font-size: 0.9rem;
+            color: #cbd5e1;
+            line-height: 1.4;
+            font-weight: 300;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.2rem;
+        }
+
+        .stat-card {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 16px;
+            padding: 1.2rem;
+            text-align: center;
+            border: 1px solid var(--glass-border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 3px;
+        }
+        
+        .stat-card:nth-child(1)::after { background: var(--accent); }
+        .stat-card:nth-child(2)::after { background: var(--primary); }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .hidden { display: none !important; }
+        
+        .error-msg {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 1.2rem;
+            border-radius: 16px;
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 500;
+            backdrop-filter: blur(10px);
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* Initial Setup Placeholder */
+        .empty-placeholder {
+            text-align: center;
+            padding: 2rem 1rem;
+        }
+        .empty-placeholder svg {
+            width: 80px; height: 80px;
+            fill: rgba(255,255,255,0.1);
+            margin-bottom: 1rem;
+            animation: float 4s ease-in-out infinite alternate;
+        }
+        .empty-placeholder h2 {
+            font-size: 1.5rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="blob-1"></div>
+    <div class="blob-2"></div>
+
+    <div class="container">
+        <div class="header">
+            <h1>KFF PREDICTOR</h1>
+            <p>Next-Gen Neural Engine</p>
+        </div>
+
+        <button id="predictBtn" class="action-btn" onclick="triggerPrediction()">
+            <span id="btnText">Initialize Predictor</span>
+            <div id="btnLoader" class="loader"></div>
+        </button>
+
+        <div id="errorBox" class="error-msg hidden"></div>
+
+        <!-- Initial Placeholder (dissapears after click) -->
+        <div id="initialState" class="glass-card empty-placeholder">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="rgba(255,255,255,0.2)" stroke-width="2" fill="none" stroke-linejoin="round"/>
+            </svg>
+            <h2>Awaiting Data Access...</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.5rem;">Click the button above to safely fetch the latest Bazi and run the ML models.</p>
+        </div>
+
+        <!-- Results (hidden initially) -->
+        <div id="predictionResult" class="glass-card hidden">
+            <div id="baziLabel" class="bazi-label">TARGET BAZI: --</div>
+            
+            <div class="prediction-numbers">
+                <span id="num1">-</span>
+                <span id="num2">-</span>
+            </div>
+
+            <!-- Risk Management Component -->
+            <div id="riskBox" class="risk-box hidden" style="margin-top: 1.5rem;">
+                <div class="signal-header">AI Risk Engine Signal</div>
+                <div id="riskLevel" class="signal-level">-</div>
+                <div id="riskAction" class="signal-action">-</div>
+                <div id="riskReason" class="signal-reason">-</div>
+            </div>
+
+            <div class="probabilities">
+                <div class="prob-bar-container">
+                    <div class="prob-label">
+                        <span id="label1">Prediction I</span>
+                        <span id="pct1">-%</span>
+                    </div>
+                    <div class="prob-track">
+                        <div id="bar1" class="prob-fill" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="prob-bar-container">
+                    <div class="prob-label">
+                        <span id="label2">Prediction II</span>
+                        <span id="pct2">-%</span>
+                    </div>
+                    <div class="prob-track">
+                        <div id="bar2" class="prob-fill alt" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Statistics Grid -->
+            <div id="statsBox" class="stats-grid hidden" style="margin-top: 1.5rem;">
+                <div class="stat-card">
+                    <div class="stat-label">Today's Accuracy</div>
+                    <div id="statToday" class="stat-value" style="color: var(--accent);">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Weekly Accuracy</div>
+                    <div id="statWeek" class="stat-value" style="color: var(--primary);">-</div>
+                </div>
+            </div>
+
+            <div id="lastUpdated" style="text-align: center; color: rgba(255,255,255,0.3); font-size: 0.75rem; margin-top: 2rem; text-transform: uppercase;">
+                Awaiting Data Sync...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function triggerPrediction() {
+            const btn = document.getElementById('predictBtn');
+            const btnText = document.getElementById('btnText');
+            const btnLoader = document.getElementById('btnLoader');
+            const errorBox = document.getElementById('errorBox');
+            const resultBox = document.getElementById('predictionResult');
+            const initialBox = document.getElementById('initialState');
+
+            // Set loading state
+            btn.disabled = true;
+            btnText.textContent = "Processing Neural Data...";
+            btnLoader.style.display = "block";
+            errorBox.classList.add('hidden');
+            
+            try {
+                const response = await fetch('/api/predict');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Start rendering results
+                    initialBox.classList.add('hidden');
+                    resultBox.classList.remove('hidden');
+
+                    document.getElementById('baziLabel').textContent = `TARGET BAZI: ${data.data.next_bazi}`;
+                    
+                    document.getElementById('num1').textContent = data.data.predictions[0].number;
+                    document.getElementById('num2').textContent = data.data.predictions[1].number;
+                    
+                    const pct1 = data.data.predictions[0].probability.toFixed(1);
+                    document.getElementById('pct1').textContent = `${pct1}%`;
+                    setTimeout(() => { document.getElementById('bar1').style.width = `${pct1}%`; }, 200);
+
+                    const pct2 = data.data.predictions[1].probability.toFixed(1);
+                    document.getElementById('pct2').textContent = `${pct2}%`;
+                    setTimeout(() => { document.getElementById('bar2').style.width = `${pct2}%`; }, 400);
+
+                    // Risk Management Handling
+                    if (data.data.risk_management) {
+                        const risk = data.data.risk_management;
+                        const riskBox = document.getElementById('riskBox');
+                        
+                        document.getElementById('riskLevel').textContent = risk.level;
+                        document.getElementById('riskAction').textContent = risk.action;
+                        document.getElementById('riskReason').textContent = risk.reason;
+                        
+                        // Dynamic color mapping based on backend 'color' string
+                        let signalColor = 'var(--primary)';
+                        if(risk.color === 'red') signalColor = 'var(--danger)';
+                        if(risk.color === 'green') signalColor = 'var(--accent)';
+                        if(risk.color === 'gold' || risk.color === 'yellow') signalColor = 'var(--warning)';
+
+                        document.getElementById('riskLevel').style.color = signalColor;
+                        riskBox.style.setProperty('--accent', signalColor);
+                        document.styleSheets[0].insertRule(`.risk-box::before { background: ${signalColor} !important; }`, 0);
+                        
+                        riskBox.classList.remove('hidden');
+                        
+                        // Stats Handling
+                        const stats = data.data.stats;
+                        document.getElementById('statToday').textContent = stats.today_matches;
+                        document.getElementById('statWeek').textContent = stats.weekly_matches;
+                        document.getElementById('statsBox').classList.remove('hidden');
+                    }
+
+                    const now = new Date();
+                    document.getElementById('lastUpdated').textContent = `System Synchronized at ${now.toLocaleTimeString()}`;
+                    
+                } else {
+                    errorBox.textContent = data.message || "Neural link failed. Please try again.";
+                    errorBox.classList.remove('hidden');
+                }
+                
+            } catch (err) {
+                console.error(err);
+                errorBox.textContent = "Server disconnected. Check your network.";
+                errorBox.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = "Refresh Prediction";
+                btnLoader.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>
