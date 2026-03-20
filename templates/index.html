@@ -561,7 +561,6 @@
 
                         document.getElementById('riskLevel').style.color = signalColor;
                         riskBox.style.setProperty('--accent', signalColor);
-                        document.styleSheets[0].insertRule(`.risk-box::before { background: ${signalColor} !important; }`, 0);
                         
                         riskBox.classList.remove('hidden');
                         
