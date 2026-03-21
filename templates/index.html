@@ -19,6 +19,13 @@
             --glass-bg: rgba(15, 23, 42, 0.4);
             --glass-border: rgba(255, 255, 255, 0.08);
         }
+        
+        /* Load Chart.js */
+        canvas {
+            display: block;
+            margin: 1rem auto;
+            max-height: 200px;
+        }
 
         * {
             margin: 0;
@@ -419,9 +426,26 @@
             font-size: 1.5rem;
             color: #94a3b8;
             font-weight: 500;
+        /* Patti Styling */
+        .patti-suggestion {
+            font-size: 0.9rem;
+            color: var(--warning);
+            text-align: center;
+            margin-top: 0.5rem;
+            letter-spacing: 1px;
+            text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+            min-height: 20px;
         }
 
+        .chart-container {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -455,8 +479,14 @@
             <div id="baziLabel" class="bazi-label">TARGET BAZI: --</div>
             
             <div class="prediction-numbers">
-                <span id="num1">-</span>
-                <span id="num2">-</span>
+                <div style="display:flex; flex-direction:column; align-items:center;">
+                    <span id="num1">-</span>
+                    <div id="patti1" class="patti-suggestion"></div>
+                </div>
+                <div style="display:flex; flex-direction:column; align-items:center;">
+                    <span id="num2">-</span>
+                    <div id="patti2" class="patti-suggestion"></div>
+                </div>
             </div>
 
             <!-- Risk Management Component -->
@@ -501,6 +531,12 @@
                 </div>
             </div>
 
+            <!-- Historical Analytics Chart -->
+            <div id="chartBox" class="chart-container hidden">
+                <div class="stat-label" style="text-align: center; margin-bottom: 0.5rem;">Live Neural Trend Analysis</div>
+                <canvas id="historyChart"></canvas>
+            </div>
+
             <div id="lastUpdated" style="text-align: center; color: rgba(255,255,255,0.3); font-size: 0.75rem; margin-top: 2rem; text-transform: uppercase;">
                 Awaiting Data Sync...
             </div>
@@ -508,6 +544,8 @@
     </div>
 
     <script>
+        let trendChart = null;
+
         async function triggerPrediction() {
             const btn = document.getElementById('predictBtn');
             const btnText = document.getElementById('btnText');
@@ -534,7 +572,10 @@
                     document.getElementById('baziLabel').textContent = `TARGET BAZI: ${data.data.next_bazi}`;
                     
                     document.getElementById('num1').textContent = data.data.predictions[0].number;
+                    document.getElementById('patti1').textContent = data.data.predictions[0].pattis ? data.data.predictions[0].pattis.join(' • ') : '';
+                    
                     document.getElementById('num2').textContent = data.data.predictions[1].number;
+                    document.getElementById('patti2').textContent = data.data.predictions[1].pattis ? data.data.predictions[1].pattis.join(' • ') : '';
                     
                     const pct1 = data.data.predictions[0].probability.toFixed(1);
                     document.getElementById('pct1').textContent = `${pct1}%`;
@@ -569,6 +610,43 @@
                         document.getElementById('statToday').textContent = stats.today_matches;
                         document.getElementById('statWeek').textContent = stats.weekly_matches;
                         document.getElementById('statsBox').classList.remove('hidden');
+                    }
+
+                    // Chart Rendering
+                    if (data.data.history_trend) {
+                        document.getElementById('chartBox').classList.remove('hidden');
+                        const ctx = document.getElementById('historyChart').getContext('2d');
+                        const labels = data.data.history_trend.map(h => `Bazi ${h.Bazi}`);
+                        const values = data.data.history_trend.map(h => h.Single);
+                        
+                        if(trendChart) trendChart.destroy();
+                        
+                        Chart.defaults.color = '#94a3b8';
+                        trendChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Winning Number',
+                                    data: values,
+                                    borderColor: '#8b5cf6',
+                                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                                    borderWidth: 2,
+                                    pointBackgroundColor: '#3b82f6',
+                                    pointRadius: 3,
+                                    tension: 0.3,
+                                    fill: true
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: { legend: { display: false } },
+                                scales: {
+                                    y: { min: 0, max: 9, ticks: { stepSize: 1 } }
+                                }
+                            }
+                        });
                     }
 
                     const now = new Date();

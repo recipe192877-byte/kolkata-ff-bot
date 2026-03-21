@@ -6,6 +6,7 @@ import os
 from datetime import datetime, timedelta
 import xgboost as xgb
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.neural_network import MLPClassifier
 warnings.filterwarnings('ignore')
 
 MODEL_FILE = 'xgb_model.joblib'
@@ -31,9 +32,13 @@ def load_and_preprocess_data(filepath=DATA_FILE):
         df['Month'] = df['Date_Obj'].dt.month
         df['Patti_Sum'] = df['Patti'].apply(calculate_patti_sum)
         
+        # Calculate Moving Averages for long-term trends
+        df['MA_7'] = df['Single'].rolling(window=7, min_periods=1).mean()
+        df['MA_30'] = df['Single'].rolling(window=30, min_periods=1).mean()
+        
         original_df = df.copy()
         
-        features = df[['Bazi', 'DayOfWeek', 'Month']].copy()
+        features = df[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30']].copy()
         features['Prev_1_Single'] = df['Single'].shift(1)
         features['Prev_2_Single'] = df['Single'].shift(2)
         features['Prev_3_Single'] = df['Single'].shift(3)
@@ -52,10 +57,10 @@ def load_and_preprocess_data(filepath=DATA_FILE):
 def train_and_save_model():
     features, _ = load_and_preprocess_data()
     if features is None or len(features) < 100:
-        print("Not enough data to train advanced Hybrid model.")
+        print("Not enough data to train advanced Deep Learning model.")
         return False
         
-    X = features[['Bazi', 'DayOfWeek', 'Month', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum']]
+    X = features[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum']]
     y = features['Target_Single']
     
     # Advanced XGBoost Engine
@@ -77,17 +82,28 @@ def train_and_save_model():
         random_state=42
     )
 
-    # Hybrid Ensemble (Soft Voting for highly accurate probability distribution)
+    # Multi-Layer Perceptron (Neural Network Engine)
+    mlp_model = MLPClassifier(
+        hidden_layer_sizes=(64, 32),
+        activation='relu',
+        solver='adam',
+        alpha=0.0001,
+        max_iter=300,
+        random_state=42
+    )
+
+    # Deep Hybrid AI Ensemble (XGB + RF + Neural Network)
     model = VotingClassifier(
-        estimators=[('xgb', xgb_model), ('rf', rf_model)],
+        estimators=[('xgb', xgb_model), ('rf', rf_model), ('mlp', mlp_model)],
         voting='soft',
-        weights=[1.5, 1.0] # Prioritize XGBoost slightly more
+        weights=[1.5, 1.0, 1.2] # Balance the voting power
     )
     
     model.fit(X, y)
     
     joblib.dump(model, MODEL_FILE)
-    print(f"Hybrid AI Model (XGB+RF) trained on {len(X)} historical records and saved successfully.")
+    print(f"Deep Hybrid AI Model (XGB+RF+MLP) trained on {len(X)} historical records and saved successfully.")
+    
     return True
 
 def backtest_recent_stats(original_df, features):
@@ -96,7 +112,7 @@ def backtest_recent_stats(original_df, features):
     except:
         return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
         
-    X_all = features[['Bazi', 'DayOfWeek', 'Month', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum']]
+    X_all = features[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum']]
     y_all = features['Target_Single']
     
     predictions = model.predict(X_all)
@@ -135,6 +151,16 @@ def backtest_recent_stats(original_df, features):
         "losing_streak": losing_streak
     }
 
+def get_patti_suggestions(original_df, target_single):
+    # Search history for this specific single and find top 3 pattis
+    history = original_df[original_df['Single'] == target_single]
+    if history.empty:
+        return []
+    patti_counts = history['Patti'].value_counts()
+    top_pattis = patti_counts.head(3).index.tolist()
+    # Ensure they are strings
+    return [str(p) for p in top_pattis if pd.notna(p)]
+
 def get_quick_prediction():
     if not os.path.exists(MODEL_FILE):
         success = train_and_save_model()
@@ -154,6 +180,10 @@ def get_quick_prediction():
     prev2_single = original_df.iloc[-2]['Single'] if len(original_df) > 1 else 0
     prev3_single = original_df.iloc[-3]['Single'] if len(original_df) > 2 else 0
     
+    # Calculate MAs
+    ma_7 = original_df['Single'].tail(7).mean()
+    ma_30 = original_df['Single'].tail(30).mean()
+    
     last_date_str = str(last_record['Date']).strip()
     
     today_obj = datetime.utcnow() + timedelta(hours=5, minutes=30)
@@ -172,6 +202,8 @@ def get_quick_prediction():
         'Bazi': [next_bazi], 
         'DayOfWeek': [day_of_week],
         'Month': [month],
+        'MA_7': [ma_7],
+        'MA_30': [ma_30],
         'Prev_1_Single': [last_single], 
         'Prev_2_Single': [prev2_single],
         'Prev_3_Single': [prev3_single],
@@ -184,6 +216,9 @@ def get_quick_prediction():
     
     top_2 = sorted_probs[:2]
     top_prob = top_2[0][1] * 100
+    
+    patti_suggestions_1 = get_patti_suggestions(original_df, int(top_2[0][0]))
+    patti_suggestions_2 = get_patti_suggestions(original_df, int(top_2[1][0]))
     
     stats = backtest_recent_stats(original_df, features)
     
@@ -219,13 +254,25 @@ def get_quick_prediction():
         action = "PLAY LIGHT (LOW BET)"
         color = "yellow"
         
+    history_trend = original_df.tail(30)[['Bazi', 'Single']].to_dict('records')
+    # ensure int types
+    history_trend = [{"Bazi": int(x['Bazi']), "Single": int(x['Single'])} for x in history_trend]
+    
     return {
         "status": "success",
         "data": {
             "next_bazi": int(next_bazi),
             "predictions": [
-                {"number": int(top_2[0][0]), "probability": round(top_2[0][1] * 100, 1)},
-                {"number": int(top_2[1][0]), "probability": round(top_2[1][1] * 100, 1)}
+                {
+                    "number": int(top_2[0][0]), 
+                    "probability": round(top_2[0][1] * 100, 1),
+                    "pattis": patti_suggestions_1
+                },
+                {
+                    "number": int(top_2[1][0]), 
+                    "probability": round(top_2[1][1] * 100, 1),
+                    "pattis": patti_suggestions_2
+                }
             ],
             "risk_management": {
                 "level": risk_status,
@@ -239,11 +286,25 @@ def get_quick_prediction():
                 "weekly_matches": str(stats['week_matches']),
                 "winning_streak": int(stats['winning_streak']),
                 "losing_streak": int(stats['losing_streak'])
-            }
+            },
+            "history_trend": history_trend
         }
     }
 
 if __name__ == "__main__":
+    import time
+    print("Initializing Deep Learning Engine and Backtesting...")
+    t1 = time.time()
     train_and_save_model()
+    t2 = time.time()
+    print(f"Training completed in {t2-t1:.2f} seconds.")
     import json
-    print(json.dumps(get_quick_prediction(), indent=2))
+    res = get_quick_prediction()
+    print("\n--- PERFORMANCE & NEXT PREDICTION ---")
+    print(f"Today's Accuracy: {res['data']['stats']['today_matches']}")
+    print(f"Weekly Accuracy:  {res['data']['stats']['weekly_matches']}")
+    print(f"Current Win Streak: {res['data']['stats']['winning_streak']}")
+    print("\nNext Bazi Predictions:")
+    for p in res['data']['predictions']:
+        print(f"Number {p['number']} ({p['probability']}%) - Top Pattis: {', '.join(p['pattis'])}")
+

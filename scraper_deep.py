@@ -10,7 +10,7 @@ MONTHS = [
     "January", "February", "March", "April", "May", "June", 
     "July", "August", "September", "October", "November", "December"
 ]
-YEARS = [2024, 2025, 2026]
+YEARS = [2023, 2024, 2025, 2026]
 URL_PATTERN = "https://kolkataff.tv/old-kolkata-ff-fatafat-result/monthly/index.php?month={}&year={}"
 CSV_FILE = "kolkata_ff_history_advanced.csv"
 
