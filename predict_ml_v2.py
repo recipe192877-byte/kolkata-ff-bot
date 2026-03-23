@@ -32,13 +32,17 @@ def load_and_preprocess_data(filepath=DATA_FILE):
         df['Month'] = df['Date_Obj'].dt.month
         df['Patti_Sum'] = df['Patti'].apply(calculate_patti_sum)
         
+        df['Is_Even'] = (df['Single'] % 2 == 0).astype(int)
+        df['Rolling_Even_5'] = df['Is_Even'].rolling(window=5, min_periods=1).mean()
+        df['Prev_Day_Same_Bazi'] = df.groupby('Bazi')['Single'].shift(1).fillna(df['Single'].shift(1)).fillna(0)
+        
         # Calculate Moving Averages for long-term trends
         df['MA_7'] = df['Single'].rolling(window=7, min_periods=1).mean()
         df['MA_30'] = df['Single'].rolling(window=30, min_periods=1).mean()
         
         original_df = df.copy()
         
-        features = df[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30']].copy()
+        features = df[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']].copy()
         features['Prev_1_Single'] = df['Single'].shift(1)
         features['Prev_2_Single'] = df['Single'].shift(2)
         features['Prev_3_Single'] = df['Single'].shift(3)
@@ -60,7 +64,7 @@ def train_and_save_model():
         print("Not enough data to train advanced Deep Learning model.")
         return False
         
-    X = features[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum']]
+    X = features[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']]
     y = features['Target_Single']
     
     # Advanced XGBoost Engine
@@ -96,7 +100,7 @@ def train_and_save_model():
     model = VotingClassifier(
         estimators=[('xgb', xgb_model), ('rf', rf_model), ('mlp', mlp_model)],
         voting='soft',
-        weights=[1.5, 1.0, 1.2] # Balance the voting power
+        weights=[2.0, 0.8, 1.5] # Balance the voting power (Prioritize XGB & MLP)
     )
     
     model.fit(X, y)
@@ -112,7 +116,7 @@ def backtest_recent_stats(original_df, features):
     except:
         return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
         
-    X_all = features[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum']]
+    X_all = features[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']]
     y_all = features['Target_Single']
     
     predictions = model.predict(X_all)
@@ -180,9 +184,12 @@ def get_quick_prediction():
     prev2_single = original_df.iloc[-2]['Single'] if len(original_df) > 1 else 0
     prev3_single = original_df.iloc[-3]['Single'] if len(original_df) > 2 else 0
     
-    # Calculate MAs
+    # Calculate MAs and advanced features
     ma_7 = original_df['Single'].tail(7).mean()
     ma_30 = original_df['Single'].tail(30).mean()
+    
+    is_even_list = original_df['Single'].tail(5).apply(lambda x: 1 if x%2==0 else 0)
+    rolling_even_5 = is_even_list.mean()
     
     last_date_str = str(last_record['Date']).strip()
     
@@ -191,6 +198,10 @@ def get_quick_prediction():
     
     is_today = (today_str == last_date_str)
     next_bazi = int(last_record['Bazi']) + 1 if is_today else 1
+    
+    # Prev Day Same Bazi Logic
+    same_bazi_hist = original_df[original_df['Bazi'] == next_bazi]
+    prev_day_same_bazi_val = same_bazi_hist.iloc[-1]['Single'] if not same_bazi_hist.empty else last_single
     
     if next_bazi > 8:
         return {"status": "error", "message": "All 8 Bazis for today are completed."}
@@ -207,7 +218,9 @@ def get_quick_prediction():
         'Prev_1_Single': [last_single], 
         'Prev_2_Single': [prev2_single],
         'Prev_3_Single': [prev3_single],
-        'Prev_Patti_Sum': [prev_patti_sum]
+        'Prev_Patti_Sum': [prev_patti_sum],
+        'Rolling_Even_5': [rolling_even_5],
+        'Prev_Day_Same_Bazi': [prev_day_same_bazi_val]
     })
     
     probabilities = model.predict_proba(query)[0]

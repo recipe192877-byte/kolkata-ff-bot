@@ -262,6 +262,12 @@
             0% { box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4); }
             100% { box-shadow: 0 10px 40px rgba(139, 92, 246, 0.6); }
         }
+        
+        .super-glow {
+            box-shadow: 0 0 30px rgba(16, 185, 129, 0.8), inset 0 0 20px rgba(16, 185, 129, 0.5) !important;
+            border-color: #10b981 !important;
+            color: #10b981 !important;
+        }
 
         .action-btn:hover {
             transform: translateY(-3px) scale(1.02);
@@ -426,15 +432,23 @@
             font-size: 1.5rem;
             color: #94a3b8;
             font-weight: 500;
+        }
         /* Patti Styling */
         .patti-suggestion {
-            font-size: 0.9rem;
+            font-size: 0.95rem;
             color: var(--warning);
             text-align: center;
-            margin-top: 0.5rem;
-            letter-spacing: 1px;
-            text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
-            min-height: 20px;
+            margin-top: 0.8rem;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            padding: 4px 12px;
+            border-radius: 8px;
+            min-height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .chart-container {
@@ -456,6 +470,18 @@
         <div class="header">
             <h1>KFF PREDICTOR</h1>
             <p>Next-Gen Neural Engine</p>
+            
+            <div style="display: flex; justify-content: center; gap: 15px; margin-top: 15px; align-items: center;">
+                <div class="toggle-container" id="prog-toggle" title="Progression Strategy" style="display:flex; align-items:center; gap:8px;">
+                    <span class="toggle-label" id="prog-label" style="font-size: 13px; font-weight:900; color:var(--primary); transition:0.3s;">MART</span>
+                    <div class="toggle-track" id="prog-track" style="width: 44px; height: 22px; background: rgba(255,255,255,0.1); border-radius: 11px; position: relative; border: 1px solid var(--glass-border); cursor: pointer;">
+                        <div class="toggle-knob" style="width: 18px; height: 18px; background: var(--primary); border-radius: 50%; position: absolute; top: 1px; left: 2px; transition: 0.3s; box-shadow: 0 0 8px rgba(0,0,0,0.5);"></div>
+                    </div>
+                </div>
+                <div style="font-size: 11px; font-weight:800; color:var(--text-muted); display:flex; align-items:center; background: rgba(0,0,0,0.5); padding: 5px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+                    BASE: 20 PTS
+                </div>
+            </div>
         </div>
 
         <button id="predictBtn" class="action-btn" onclick="triggerPrediction()">
@@ -545,6 +571,47 @@
 
     <script>
         let trendChart = null;
+        let progMode = 'MART'; // MART, FIBO, DALE, AUTO
+        const BASE_UNIT = 20;
+        const MAX_BET = 1000;
+        const FIB = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
+
+        function getBetAmount(streak, progType) {
+            let mode = progType;
+            if (mode === 'AUTO') {
+                if (streak >= 3) mode = 'FIBO';
+                else if (streak > 0) mode = 'MART';
+                else mode = 'DALE';
+            }
+            
+            let amt = BASE_UNIT;
+            let steps = Math.max(0, streak);
+            
+            if (mode === 'FIBO') {
+                amt = BASE_UNIT * FIB[Math.min(steps, FIB.length - 1)];
+            } else if (mode === 'DALE') {
+                amt = BASE_UNIT + (steps * (BASE_UNIT / 2));
+            } else { // MART (Double per step on loss)
+                amt = BASE_UNIT * Math.pow(2, Math.min(steps, 6)); 
+            }
+            return Math.min(amt, MAX_BET);
+        }
+
+        document.getElementById('prog-toggle').addEventListener('click', () => {
+            if(progMode === 'MART') progMode = 'FIBO';
+            else if(progMode === 'FIBO') progMode = 'DALE';
+            else if(progMode === 'DALE') progMode = 'AUTO';
+            else progMode = 'MART';
+            
+            let lbl = document.getElementById('prog-label');
+            let knob = document.querySelector('.toggle-knob');
+            lbl.innerText = progMode;
+            
+            if(progMode === 'MART') { lbl.style.color = 'var(--primary)'; knob.style.left = '2px'; knob.style.background= 'var(--primary)'; }
+            else if(progMode === 'FIBO') { lbl.style.color = 'var(--warning)'; knob.style.left = '11px'; knob.style.background= 'var(--warning)'; }
+            else if(progMode === 'DALE') { lbl.style.color = 'var(--accent)'; knob.style.left = '20px'; knob.style.background= 'var(--accent)'; }
+            else { lbl.style.color = '#00e5ff'; knob.style.left = '24px'; knob.style.background= '#00e5ff'; }
+        });
 
         async function triggerPrediction() {
             const btn = document.getElementById('predictBtn');
@@ -571,17 +638,40 @@
 
                     document.getElementById('baziLabel').textContent = `TARGET BAZI: ${data.data.next_bazi}`;
                     
-                    document.getElementById('num1').textContent = data.data.predictions[0].number;
-                    document.getElementById('patti1').textContent = data.data.predictions[0].pattis ? data.data.predictions[0].pattis.join(' • ') : '';
-                    
-                    document.getElementById('num2').textContent = data.data.predictions[1].number;
-                    document.getElementById('patti2').textContent = data.data.predictions[1].pattis ? data.data.predictions[1].pattis.join(' • ') : '';
-                    
-                    const pct1 = data.data.predictions[0].probability.toFixed(1);
-                    document.getElementById('pct1').textContent = `${pct1}%`;
-                    setTimeout(() => { document.getElementById('bar1').style.width = `${pct1}%`; }, 200);
+                    // Remove glow before rolling
+                    document.getElementById('num1').classList.remove('super-glow');
+                    document.getElementById('num2').classList.remove('super-glow');
 
-                    const pct2 = data.data.predictions[1].probability.toFixed(1);
+                    // Slot Machine Animation
+                    let rolls = 0;
+                    let interval = setInterval(() => {
+                        document.getElementById('num1').textContent = Math.floor(Math.random() * 10);
+                        document.getElementById('num2').textContent = Math.floor(Math.random() * 10);
+                        rolls++;
+                        
+                        if(rolls > 15) {
+                            clearInterval(interval);
+                            
+                            // Final Results
+                            document.getElementById('num1').textContent = data.data.predictions[0].number;
+                            document.getElementById('patti1').textContent = data.data.predictions[0].pattis ? data.data.predictions[0].pattis.join(' • ') : '';
+                            
+                            document.getElementById('num2').textContent = data.data.predictions[1].number;
+                            document.getElementById('patti2').textContent = data.data.predictions[1].pattis ? data.data.predictions[1].pattis.join(' • ') : '';
+                            
+                            const pct1 = data.data.predictions[0].probability.toFixed(1);
+                            document.getElementById('pct1').textContent = `${pct1}%`;
+                            document.getElementById('bar1').style.width = `${pct1}%`;
+        
+                            const pct2 = data.data.predictions[1].probability.toFixed(1);
+                            document.getElementById('pct2').textContent = `${pct2}%`;
+                            document.getElementById('bar2').style.width = `${pct2}%`;
+                            
+                            // Super Glow for High Probability
+                            if(data.data.predictions[0].probability >= 25.0) document.getElementById('num1').classList.add('super-glow');
+                            if(data.data.predictions[1].probability >= 25.0) document.getElementById('num2').classList.add('super-glow');
+                        }
+                    }, 50);
                     document.getElementById('pct2').textContent = `${pct2}%`;
                     setTimeout(() => { document.getElementById('bar2').style.width = `${pct2}%`; }, 400);
 
@@ -610,6 +700,17 @@
                         document.getElementById('statToday').textContent = stats.today_matches;
                         document.getElementById('statWeek').textContent = stats.weekly_matches;
                         document.getElementById('statsBox').classList.remove('hidden');
+
+                        // Dynamic Bet Sizing
+                        let recommendedBet = getBetAmount(stats.losing_streak, progMode);
+                        let actionText = risk.action;
+                        
+                        if (risk.color !== 'red') {
+                           actionText += ` | BET: ${recommendedBet} PTS`;
+                        } else {
+                           actionText += ` | (SAFE: ${BASE_UNIT} PTS)`;
+                        }
+                        document.getElementById('riskAction').textContent = actionText;
                     }
 
                     // Chart Rendering
