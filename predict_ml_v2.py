@@ -3,14 +3,17 @@ import numpy as np
 import joblib
 import warnings
 import os
+import json
 from datetime import datetime, timedelta
 import xgboost as xgb
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
-from sklearn.neural_network import MLPClassifier
+import lightgbm as lgb
+from sklearn.ensemble import RandomForestClassifier, StackingClassifier
+from sklearn.linear_model import LogisticRegression
 warnings.filterwarnings('ignore')
 
 MODEL_FILE = 'xgb_model.joblib'
 DATA_FILE = 'kolkata_ff_history_advanced.csv'
+STATS_FILE = 'backtest_stats.json'
 
 def calculate_patti_sum(patti_val):
     if pd.isna(patti_val) or str(patti_val).strip() == '':
@@ -39,130 +42,170 @@ def load_and_preprocess_data(filepath=DATA_FILE):
         # Calculate Moving Averages for long-term trends
         df['MA_7'] = df['Single'].rolling(window=7, min_periods=1).mean()
         df['MA_30'] = df['Single'].rolling(window=30, min_periods=1).mean()
+        df['STD_7'] = df['Single'].rolling(window=7, min_periods=1).std().fillna(0.0)
         
         original_df = df.copy()
         
-        features = df[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']].copy()
+        features = df[['Date', 'Date_Obj', 'Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'STD_7', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']].copy()
+        
+        # New Lag Features for Better Series Prediction
         features['Prev_1_Single'] = df['Single'].shift(1)
         features['Prev_2_Single'] = df['Single'].shift(2)
         features['Prev_3_Single'] = df['Single'].shift(3)
+        features['Prev_4_Single'] = df['Single'].shift(4)
+        features['Prev_5_Single'] = df['Single'].shift(5)
         features['Prev_Patti_Sum'] = df['Patti_Sum'].shift(1)
         
         features['Target_Single'] = df['Single']
         
         features = features.dropna()
-        original_df = original_df.iloc[3:].reset_index(drop=True)
+        original_df = original_df.iloc[5:].reset_index(drop=True)
         
         return features, original_df
         
     except FileNotFoundError:
         return None, None
 
-def train_and_save_model():
-    features, _ = load_and_preprocess_data()
-    if features is None or len(features) < 100:
-        print("Not enough data to train advanced Deep Learning model.")
-        return False
-        
-    X = features[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']]
-    y = features['Target_Single']
-    
-    # Advanced XGBoost Engine
+def create_stacking_model():
     xgb_model = xgb.XGBClassifier(
-        n_estimators=300, 
-        max_depth=6, 
-        learning_rate=0.05,
+        n_estimators=200, 
+        max_depth=4, 
+        learning_rate=0.03,
         subsample=0.8,
         colsample_bytree=0.8,
         random_state=42,
         eval_metric='mlogloss'
     )
     
-    # Random Forest Engine
     rf_model = RandomForestClassifier(
-        n_estimators=300,
-        max_depth=8,
-        min_samples_split=5,
+        n_estimators=200,
+        max_depth=6,
+        min_samples_leaf=4,
         random_state=42
     )
 
-    # Multi-Layer Perceptron (Neural Network Engine)
-    mlp_model = MLPClassifier(
-        hidden_layer_sizes=(64, 32),
-        activation='relu',
-        solver='adam',
-        alpha=0.0001,
-        max_iter=300,
-        random_state=42
+    lgb_model = lgb.LGBMClassifier(
+        n_estimators=200,
+        max_depth=4,
+        learning_rate=0.03,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        verbose=-1
     )
 
-    # Deep Hybrid AI Ensemble (XGB + RF + Neural Network)
-    model = VotingClassifier(
-        estimators=[('xgb', xgb_model), ('rf', rf_model), ('mlp', mlp_model)],
-        voting='soft',
-        weights=[2.0, 0.8, 1.5] # Balance the voting power (Prioritize XGB & MLP)
+    meta_learner = LogisticRegression(max_iter=500)
+    
+    # Stacking ensures models weight themselves properly according to OOS error
+    model = StackingClassifier(
+        estimators=[('xgb', xgb_model), ('rf', rf_model), ('lgb', lgb_model)],
+        final_estimator=meta_learner,
+        passthrough=False,
+        cv=3
     )
-    
-    model.fit(X, y)
-    
-    joblib.dump(model, MODEL_FILE)
-    print(f"Deep Hybrid AI Model (XGB+RF+MLP) trained on {len(X)} historical records and saved successfully.")
-    
-    return True
+    return model
 
-def backtest_recent_stats(original_df, features):
-    try:
-        model = joblib.load(MODEL_FILE)
-    except:
+def generate_oos_stats(features):
+    features = features.sort_values(by=['Date_Obj', 'Bazi'])
+    unique_dates = features['Date_Obj'].dt.date.unique()
+    
+    if len(unique_dates) < 20: 
         return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
         
-    X_all = features[['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']]
-    y_all = features['Target_Single']
+    last_14_dates = unique_dates[-14:]
+    cutoff_date = last_14_dates[0]
     
-    predictions = model.predict(X_all)
-    matches = (predictions == y_all).values
+    train_df = features[features['Date_Obj'].dt.date < cutoff_date]
+    test_df = features[features['Date_Obj'].dt.date >= cutoff_date]
     
-    # Today's matches
-    last_date = original_df.iloc[-1]['Date']
-    today_mask = (original_df['Date'] == last_date).values
-    today_matches_count = matches[today_mask].sum()
+    X_cols = ['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'STD_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
+    
+    X_train = train_df[X_cols]
+    y_train = train_df['Target_Single']
+    X_test = test_df[X_cols]
+    y_test = test_df['Target_Single']
+    
+    # Train validation model to get True Out-of-Sample Stats
+    val_model = create_stacking_model()
+    val_model.fit(X_train, y_train)
+    predictions = val_model.predict(X_test)
+    
+    matches = (predictions == y_test).values
+    test_df['Matched'] = matches
+    
+    last_date = test_df['Date'].iloc[-1]
+    today_mask = test_df['Date'] == last_date
+    today_matches_count = test_df[today_mask]['Matched'].sum()
     today_total = today_mask.sum()
     
-    # Weekly matches
-    unique_dates = original_df['Date'].unique()
-    last_7_dates = unique_dates[-7:] if len(unique_dates) >= 7 else unique_dates
-    week_mask = original_df['Date'].isin(last_7_dates).values
-    week_matches_count = matches[week_mask].sum()
+    test_dates = test_df['Date'].unique()
+    last_7_dates = test_dates[-7:] if len(test_dates)>=7 else test_dates
+    week_mask = test_df['Date'].isin(last_7_dates)
+    week_matches_count = test_df[week_mask]['Matched'].sum()
     week_total = week_mask.sum()
     
     prev_correct = bool(matches[-1]) if len(matches) > 0 else False
     
-    streak = 0
+    win_streak = 0
     for m in reversed(matches):
-        if m: streak += 1
+        if m: win_streak += 1
         else: break
         
-    losing_streak = 0
+    lose_streak = 0
     for m in reversed(matches):
-        if not m: losing_streak += 1
+        if not m: lose_streak += 1
         else: break
         
-    return {
+    stats = {
         "today_matches": f"{today_matches_count}/{today_total}",
         "week_matches": f"{week_matches_count}/{week_total}",
         "prev_correct": prev_correct,
-        "winning_streak": streak,
-        "losing_streak": losing_streak
+        "winning_streak": int(win_streak),
+        "losing_streak": int(lose_streak)
     }
+    
+    with open(STATS_FILE, 'w') as f:
+        json.dump(stats, f)
+        
+    return stats
+
+def train_and_save_model():
+    features, _ = load_and_preprocess_data()
+    if features is None or len(features) < 100:
+        print("Not enough data to train advanced ML model.")
+        return False
+        
+    # Before training final model, generate strict Out-Of-Sample validation stats natively!
+    print("Generating pure OOS Validation Stats...")
+    generate_oos_stats(features)
+        
+    X_cols = ['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'STD_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
+    X = features[X_cols]
+    y = features['Target_Single']
+    
+    model = create_stacking_model()
+    model.fit(X, y)
+    
+    joblib.dump(model, MODEL_FILE)
+    print(f"Deep Stacking AI Model trained on {len(X)} historical records and saved successfully.")
+    
+    return True
+
+def backtest_recent_stats(original_df, features):
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
 
 def get_patti_suggestions(original_df, target_single):
-    # Search history for this specific single and find top 3 pattis
     history = original_df[original_df['Single'] == target_single]
     if history.empty:
         return []
     patti_counts = history['Patti'].value_counts()
     top_pattis = patti_counts.head(3).index.tolist()
-    # Ensure they are strings
     return [str(p) for p in top_pattis if pd.notna(p)]
 
 def get_quick_prediction():
@@ -183,10 +226,13 @@ def get_quick_prediction():
     
     prev2_single = original_df.iloc[-2]['Single'] if len(original_df) > 1 else 0
     prev3_single = original_df.iloc[-3]['Single'] if len(original_df) > 2 else 0
+    prev4_single = original_df.iloc[-4]['Single'] if len(original_df) > 3 else 0
+    prev5_single = original_df.iloc[-5]['Single'] if len(original_df) > 4 else 0
     
-    # Calculate MAs and advanced features
     ma_7 = original_df['Single'].tail(7).mean()
     ma_30 = original_df['Single'].tail(30).mean()
+    std_7 = original_df['Single'].tail(7).std()
+    if pd.isna(std_7): std_7 = 0.0
     
     is_even_list = original_df['Single'].tail(5).apply(lambda x: 1 if x%2==0 else 0)
     rolling_even_5 = is_even_list.mean()
@@ -199,7 +245,6 @@ def get_quick_prediction():
     is_today = (today_str == last_date_str)
     next_bazi = int(last_record['Bazi']) + 1 if is_today else 1
     
-    # Prev Day Same Bazi Logic
     same_bazi_hist = original_df[original_df['Bazi'] == next_bazi]
     prev_day_same_bazi_val = same_bazi_hist.iloc[-1]['Single'] if not same_bazi_hist.empty else last_single
     
@@ -215,9 +260,12 @@ def get_quick_prediction():
         'Month': [month],
         'MA_7': [ma_7],
         'MA_30': [ma_30],
+        'STD_7': [std_7],
         'Prev_1_Single': [last_single], 
         'Prev_2_Single': [prev2_single],
         'Prev_3_Single': [prev3_single],
+        'Prev_4_Single': [prev4_single],
+        'Prev_5_Single': [prev5_single],
         'Prev_Patti_Sum': [prev_patti_sum],
         'Rolling_Even_5': [rolling_even_5],
         'Prev_Day_Same_Bazi': [prev_day_same_bazi_val]
@@ -235,7 +283,7 @@ def get_quick_prediction():
     
     stats = backtest_recent_stats(original_df, features)
     
-    # Hardcore Risk Management Engine (Hinglish integration as requested)
+    # Enhanced ML Risk Logic
     if next_bazi == 1:
         risk_status = "EXTREME RISK"
         reason = "Pehli Bazi sabse unpredictable hoti hai. Market ka trend clear nahi hai."
@@ -268,7 +316,6 @@ def get_quick_prediction():
         color = "yellow"
         
     history_trend = original_df.tail(30)[['Bazi', 'Single']].to_dict('records')
-    # ensure int types
     history_trend = [{"Bazi": int(x['Bazi']), "Single": int(x['Single'])} for x in history_trend]
     
     return {
@@ -311,13 +358,12 @@ if __name__ == "__main__":
     train_and_save_model()
     t2 = time.time()
     print(f"Training completed in {t2-t1:.2f} seconds.")
-    import json
     res = get_quick_prediction()
-    print("\n--- PERFORMANCE & NEXT PREDICTION ---")
-    print(f"Today's Accuracy: {res['data']['stats']['today_matches']}")
-    print(f"Weekly Accuracy:  {res['data']['stats']['weekly_matches']}")
-    print(f"Current Win Streak: {res['data']['stats']['winning_streak']}")
-    print("\nNext Bazi Predictions:")
-    for p in res['data']['predictions']:
-        print(f"Number {p['number']} ({p['probability']}%) - Top Pattis: {', '.join(p['pattis'])}")
-
+    if res['status'] == 'success':
+        print("\n--- PERFORMANCE & NEXT PREDICTION ---")
+        print(f"Today's Accuracy: {res['data']['stats']['today_matches']}")
+        print(f"Weekly Accuracy:  {res['data']['stats']['weekly_matches']}")
+        print(f"Current Win Streak: {res['data']['stats']['winning_streak']}")
+        print("\nNext Bazi Predictions:")
+        for p in res['data']['predictions']:
+            print(f"Number {p['number']} ({p['probability']}%) - Top Pattis: {', '.join(p['pattis'])}")
