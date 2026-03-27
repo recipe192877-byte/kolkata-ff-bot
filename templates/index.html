@@ -513,6 +513,10 @@
                     <span id="num2">-</span>
                     <div id="patti2" class="patti-suggestion"></div>
                 </div>
+                <div style="display:flex; flex-direction:column; align-items:center;">
+                    <span id="num3">-</span>
+                    <div id="patti3" class="patti-suggestion"></div>
+                </div>
             </div>
 
             <!-- Risk Management Component -->
@@ -541,6 +545,16 @@
                     </div>
                     <div class="prob-track">
                         <div id="bar2" class="prob-fill alt" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <div class="prob-bar-container" style="margin-top: 1.2rem;">
+                    <div class="prob-label">
+                        <span id="label3">Prediction III</span>
+                        <span id="pct3">-%</span>
+                    </div>
+                    <div class="prob-track">
+                        <div id="bar3" class="prob-fill" style="width: 0%; background: linear-gradient(90deg, #10b981, #34d399);"></div>
                     </div>
                 </div>
             </div>
@@ -641,12 +655,14 @@
                     // Remove glow before rolling
                     document.getElementById('num1').classList.remove('super-glow');
                     document.getElementById('num2').classList.remove('super-glow');
+                    document.getElementById('num3').classList.remove('super-glow');
 
                     // Slot Machine Animation
                     let rolls = 0;
                     let interval = setInterval(() => {
                         document.getElementById('num1').textContent = Math.floor(Math.random() * 10);
                         document.getElementById('num2').textContent = Math.floor(Math.random() * 10);
+                        document.getElementById('num3').textContent = Math.floor(Math.random() * 10);
                         rolls++;
                         
                         if(rolls > 15) {
@@ -659,6 +675,9 @@
                             document.getElementById('num2').textContent = data.data.predictions[1].number;
                             document.getElementById('patti2').textContent = data.data.predictions[1].pattis ? data.data.predictions[1].pattis.join(' • ') : '';
                             
+                            document.getElementById('num3').textContent = data.data.predictions[2].number;
+                            document.getElementById('patti3').textContent = data.data.predictions[2].pattis ? data.data.predictions[2].pattis.join(' • ') : '';
+                            
                             const pct1 = data.data.predictions[0].probability.toFixed(1);
                             document.getElementById('pct1').textContent = `${pct1}%`;
                             document.getElementById('bar1').style.width = `${pct1}%`;
@@ -667,13 +686,16 @@
                             document.getElementById('pct2').textContent = `${pct2}%`;
                             document.getElementById('bar2').style.width = `${pct2}%`;
                             
+                            const pct3 = data.data.predictions[2].probability.toFixed(1);
+                            document.getElementById('pct3').textContent = `${pct3}%`;
+                            document.getElementById('bar3').style.width = `${pct3}%`;
+                            
                             // Super Glow for High Probability
                             if(data.data.predictions[0].probability >= 25.0) document.getElementById('num1').classList.add('super-glow');
                             if(data.data.predictions[1].probability >= 25.0) document.getElementById('num2').classList.add('super-glow');
+                            if(data.data.predictions[2].probability >= 25.0) document.getElementById('num3').classList.add('super-glow');
                         }
                     }, 50);
-                    document.getElementById('pct2').textContent = `${pct2}%`;
-                    setTimeout(() => { document.getElementById('bar2').style.width = `${pct2}%`; }, 400);
 
                     // Risk Management Handling
                     if (data.data.risk_management) {

@@ -275,11 +275,12 @@ def get_quick_prediction():
     prob_dict = {num: float(prob) for num, prob in zip(model.classes_, probabilities)}
     sorted_probs = sorted(prob_dict.items(), key=lambda x: x[1], reverse=True)
     
-    top_2 = sorted_probs[:2]
-    top_prob = top_2[0][1] * 100
+    top_3 = sorted_probs[:3]
+    top_prob = top_3[0][1] * 100
     
-    patti_suggestions_1 = get_patti_suggestions(original_df, int(top_2[0][0]))
-    patti_suggestions_2 = get_patti_suggestions(original_df, int(top_2[1][0]))
+    patti_suggestions_1 = get_patti_suggestions(original_df, int(top_3[0][0]))
+    patti_suggestions_2 = get_patti_suggestions(original_df, int(top_3[1][0]))
+    patti_suggestions_3 = get_patti_suggestions(original_df, int(top_3[2][0]))
     
     stats = backtest_recent_stats(original_df, features)
     
@@ -324,14 +325,19 @@ def get_quick_prediction():
             "next_bazi": int(next_bazi),
             "predictions": [
                 {
-                    "number": int(top_2[0][0]), 
-                    "probability": round(top_2[0][1] * 100, 1),
+                    "number": int(top_3[0][0]), 
+                    "probability": round(top_3[0][1] * 100, 1),
                     "pattis": patti_suggestions_1
                 },
                 {
-                    "number": int(top_2[1][0]), 
-                    "probability": round(top_2[1][1] * 100, 1),
+                    "number": int(top_3[1][0]), 
+                    "probability": round(top_3[1][1] * 100, 1),
                     "pattis": patti_suggestions_2
+                },
+                {
+                    "number": int(top_3[2][0]), 
+                    "probability": round(top_3[2][1] * 100, 1),
+                    "pattis": patti_suggestions_3
                 }
             ],
             "risk_management": {
