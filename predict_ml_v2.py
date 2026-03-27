@@ -128,9 +128,17 @@ def generate_oos_stats(features):
     # Train validation model to get True Out-of-Sample Stats
     val_model = create_stacking_model()
     val_model.fit(X_train, y_train)
-    predictions = val_model.predict(X_test)
     
-    matches = (predictions == y_test).values
+    probabilities = val_model.predict_proba(X_test)
+    classes = val_model.classes_
+    
+    is_match_list = []
+    for prob_row, true_val in zip(probabilities, y_test):
+        sorted_indices = prob_row.argsort()[::-1][:3]
+        top_3_preds = [classes[i] for i in sorted_indices]
+        is_match_list.append(true_val in top_3_preds)
+        
+    matches = pd.Series(is_match_list).values
     test_df['Matched'] = matches
     
     last_date = test_df['Date'].iloc[-1]
