@@ -8,3 +8,4 @@ Flask
 Werkzeug
 lxml
 xgboost
+lightgbm
