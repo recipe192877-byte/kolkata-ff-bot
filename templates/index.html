@@ -458,6 +458,54 @@
             border-radius: 16px;
             border: 1px solid rgba(255,255,255,0.05);
         }
+
+        /* History List Styling */
+        .history-item {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 0.8rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .history-bazi {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            min-width: 50px;
+        }
+        .history-preds {
+            display: flex;
+            gap: 0.5rem;
+            flex-grow: 1;
+            justify-content: center;
+        }
+        .history-num {
+            background: rgba(255,255,255,0.1);
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-weight: 800;
+            color: #fff;
+        }
+        .history-num.match {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent);
+            border: 1px solid rgba(16, 185, 129, 0.5);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
+        .history-status {
+            font-size: 0.75rem;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            min-width: 65px;
+            text-align: center;
+        }
+        .status-pass { background: rgba(16, 185, 129, 0.2); color: var(--accent); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .status-fail { background: rgba(239, 68, 68, 0.2); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .status-pending { background: rgba(245, 158, 11, 0.2); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3); }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -575,6 +623,14 @@
             <div id="chartBox" class="chart-container hidden">
                 <div class="stat-label" style="text-align: center; margin-bottom: 0.5rem;">Live Neural Trend Analysis</div>
                 <canvas id="historyChart"></canvas>
+            </div>
+
+            <!-- Daily Prediction History -->
+            <div id="historyBox" class="chart-container hidden" style="margin-top: 1.5rem;">
+                <div class="stat-label" style="text-align: center; margin-bottom: 1rem;">Today's Prediction History</div>
+                <div id="historyList" style="display: flex; flex-direction: column; gap: 0.8rem;">
+                    <!-- Dynamically injected -->
+                </div>
             </div>
 
             <div id="lastUpdated" style="text-align: center; color: rgba(255,255,255,0.3); font-size: 0.75rem; margin-top: 2rem; text-transform: uppercase;">
@@ -769,6 +825,51 @@
                                     y: { min: 0, max: 9, ticks: { stepSize: 1 } }
                                 }
                             }
+                        });
+                    }
+
+                    // Daily Prediction History Rendering
+                    if (data.data.today_history) {
+                        const historyList = document.getElementById('historyList');
+                        historyList.innerHTML = '';
+                        document.getElementById('historyBox').classList.remove('hidden');
+
+                        // Prepend current pending bazi
+                        const pendingItem = document.createElement('div');
+                        pendingItem.className = 'history-item';
+                        
+                        let predsHtml = '';
+                        const curPreds = [data.data.predictions[0].number, data.data.predictions[1].number, data.data.predictions[2].number];
+                        curPreds.forEach(p => {
+                           predsHtml += `<span class="history-num">${p}</span>`;
+                        });
+
+                        pendingItem.innerHTML = `
+                            <div class="history-bazi">Bazi ${data.data.next_bazi}</div>
+                            <div class="history-preds">${predsHtml}</div>
+                            <div class="history-status status-pending">PENDING</div>
+                        `;
+                        historyList.appendChild(pendingItem);
+
+                        // Attach past bazis
+                        data.data.today_history.forEach(item => {
+                            const domItem = document.createElement('div');
+                            domItem.className = 'history-item';
+                            
+                            let pastPredHtml = '';
+                            item.predictions.forEach(p => {
+                                let matchClass = (p === item.actual) ? 'match' : '';
+                                pastPredHtml += `<span class="history-num ${matchClass}">${p}</span>`;
+                            });
+
+                            let statusClass = item.status === 'Pass' ? 'status-pass' : 'status-fail';
+
+                            domItem.innerHTML = `
+                                <div class="history-bazi">Bazi ${item.bazi}</div>
+                                <div class="history-preds">${pastPredHtml}</div>
+                                <div class="history-status ${statusClass}">${item.status}</div>
+                            `;
+                            historyList.appendChild(domItem);
                         });
                     }
 

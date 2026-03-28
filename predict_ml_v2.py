@@ -36,13 +36,13 @@ def load_and_preprocess_data(filepath=DATA_FILE):
         df['Patti_Sum'] = df['Patti'].apply(calculate_patti_sum)
         
         df['Is_Even'] = (df['Single'] % 2 == 0).astype(int)
-        df['Rolling_Even_5'] = df['Is_Even'].rolling(window=5, min_periods=1).mean()
+        df['Rolling_Even_5'] = df['Is_Even'].shift(1).rolling(window=5, min_periods=1).mean().fillna(0)
         df['Prev_Day_Same_Bazi'] = df.groupby('Bazi')['Single'].shift(1).fillna(df['Single'].shift(1)).fillna(0)
         
         # Calculate Moving Averages for long-term trends
-        df['MA_7'] = df['Single'].rolling(window=7, min_periods=1).mean()
-        df['MA_30'] = df['Single'].rolling(window=30, min_periods=1).mean()
-        df['STD_7'] = df['Single'].rolling(window=7, min_periods=1).std().fillna(0.0)
+        df['MA_7'] = df['Single'].shift(1).rolling(window=7, min_periods=1).mean().fillna(0)
+        df['MA_30'] = df['Single'].shift(1).rolling(window=30, min_periods=1).mean().fillna(0)
+        df['STD_7'] = df['Single'].shift(1).rolling(window=7, min_periods=1).std().fillna(0.0)
         
         original_df = df.copy()
         
@@ -216,6 +216,39 @@ def get_patti_suggestions(original_df, target_single):
     top_pattis = patti_counts.head(3).index.tolist()
     return [str(p) for p in top_pattis if pd.notna(p)]
 
+def get_today_prediction_history(model, features, original_df):
+    today_obj = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    today_str = today_obj.strftime('%d/%m/%Y')
+    
+    today_features = features[features['Date'] == today_str].copy()
+    history = []
+    
+    if not today_features.empty:
+        X_cols = ['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'STD_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
+        X_today = today_features[X_cols]
+        probs = model.predict_proba(X_today)
+        classes = model.classes_
+        
+        for i, (idx, row) in enumerate(today_features.iterrows()):
+            bazi_num = int(row['Bazi'])
+            actual = int(row['Target_Single'])
+            
+            sorted_indices = probs[i].argsort()[::-1][:3]
+            top_3 = [int(classes[k]) for k in sorted_indices]
+            
+            status = "Pass" if actual in top_3 else "Fail"
+            
+            history.append({
+                "bazi": bazi_num,
+                "predictions": top_3,
+                "actual": actual,
+                "status": status
+            })
+            
+    # Sort history newest on top
+    history.sort(key=lambda x: x['bazi'], reverse=True)
+    return history
+
 def get_quick_prediction():
     if not os.path.exists(MODEL_FILE):
         success = train_and_save_model()
@@ -327,9 +360,12 @@ def get_quick_prediction():
     history_trend = original_df.tail(30)[['Bazi', 'Single']].to_dict('records')
     history_trend = [{"Bazi": int(x['Bazi']), "Single": int(x['Single'])} for x in history_trend]
     
+    today_history = get_today_prediction_history(model, features, original_df)
+    
     return {
         "status": "success",
         "data": {
+            "today_history": today_history,
             "next_bazi": int(next_bazi),
             "predictions": [
                 {
