@@ -35,6 +35,7 @@ def load_and_preprocess_data(filepath=DATA_FILE):
         df['Month'] = df['Date_Obj'].dt.month
         df['Patti_Sum'] = df['Patti'].apply(calculate_patti_sum)
         
+        df['Is_Weekend'] = df['DayOfWeek'].apply(lambda x: 1 if x >= 5 else 0)
         df['Is_Even'] = (df['Single'] % 2 == 0).astype(int)
         df['Rolling_Even_5'] = df['Is_Even'].shift(1).rolling(window=5, min_periods=1).mean().fillna(0)
         df['Prev_Day_Same_Bazi'] = df.groupby('Bazi')['Single'].shift(1).fillna(df['Single'].shift(1)).fillna(0)
@@ -43,10 +44,11 @@ def load_and_preprocess_data(filepath=DATA_FILE):
         df['MA_7'] = df['Single'].shift(1).rolling(window=7, min_periods=1).mean().fillna(0)
         df['MA_30'] = df['Single'].shift(1).rolling(window=30, min_periods=1).mean().fillna(0)
         df['STD_7'] = df['Single'].shift(1).rolling(window=7, min_periods=1).std().fillna(0.0)
+        df['Patti_MA_7'] = df['Patti_Sum'].shift(1).rolling(window=7, min_periods=1).mean().fillna(0)
         
         original_df = df.copy()
         
-        features = df[['Date', 'Date_Obj', 'Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'STD_7', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']].copy()
+        features = df[['Date', 'Date_Obj', 'Bazi', 'DayOfWeek', 'Month', 'Is_Weekend', 'MA_7', 'MA_30', 'STD_7', 'Patti_MA_7', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']].copy()
         
         # New Lag Features for Better Series Prediction
         features['Prev_1_Single'] = df['Single'].shift(1)
@@ -118,7 +120,7 @@ def generate_oos_stats(features):
     train_df = features[features['Date_Obj'].dt.date < cutoff_date]
     test_df = features[features['Date_Obj'].dt.date >= cutoff_date]
     
-    X_cols = ['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'STD_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
+    X_cols = ['Bazi', 'DayOfWeek', 'Month', 'Is_Weekend', 'MA_7', 'MA_30', 'STD_7', 'Patti_MA_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
     
     X_train = train_df[X_cols]
     y_train = train_df['Target_Single']
@@ -187,7 +189,7 @@ def train_and_save_model():
     print("Generating pure OOS Validation Stats...")
     generate_oos_stats(features)
         
-    X_cols = ['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'STD_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
+    X_cols = ['Bazi', 'DayOfWeek', 'Month', 'Is_Weekend', 'MA_7', 'MA_30', 'STD_7', 'Patti_MA_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
     X = features[X_cols]
     y = features['Target_Single']
     
@@ -224,7 +226,7 @@ def get_today_prediction_history(model, features, original_df):
     history = []
     
     if not today_features.empty:
-        X_cols = ['Bazi', 'DayOfWeek', 'Month', 'MA_7', 'MA_30', 'STD_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
+        X_cols = ['Bazi', 'DayOfWeek', 'Month', 'Is_Weekend', 'MA_7', 'MA_30', 'STD_7', 'Patti_MA_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
         X_today = today_features[X_cols]
         probs = model.predict_proba(X_today)
         classes = model.classes_
@@ -274,6 +276,8 @@ def get_quick_prediction():
     ma_30 = original_df['Single'].tail(30).mean()
     std_7 = original_df['Single'].tail(7).std()
     if pd.isna(std_7): std_7 = 0.0
+    patti_ma_7 = original_df['Patti_Sum'].tail(7).mean()
+    if pd.isna(patti_ma_7): patti_ma_7 = 0.0
     
     is_even_list = original_df['Single'].tail(5).apply(lambda x: 1 if x%2==0 else 0)
     rolling_even_5 = is_even_list.mean()
@@ -294,14 +298,17 @@ def get_quick_prediction():
         
     day_of_week = today_obj.weekday()
     month = today_obj.month
+    is_weekend = 1 if day_of_week >= 5 else 0
     
     query = pd.DataFrame({
         'Bazi': [next_bazi], 
         'DayOfWeek': [day_of_week],
         'Month': [month],
+        'Is_Weekend': [is_weekend],
         'MA_7': [ma_7],
         'MA_30': [ma_30],
         'STD_7': [std_7],
+        'Patti_MA_7': [patti_ma_7],
         'Prev_1_Single': [last_single], 
         'Prev_2_Single': [prev2_single],
         'Prev_3_Single': [prev3_single],
@@ -328,32 +335,32 @@ def get_quick_prediction():
     # Enhanced ML Risk Logic
     if next_bazi == 1:
         risk_status = "EXTREME RISK"
-        reason = "Pehli Bazi sabse unpredictable hoti hai. Market ka trend clear nahi hai."
+        reason = "Market Data Insufficient. Pehli Bazi hamesha unpredictable hoti hai, Subah ka trend clear hone de."
         action = "NAHI KHELNA HAI (SKIP)"
         color = "red"
-    elif top_prob < 15.0:
+    elif top_prob < 14.0:
         risk_status = "VERY HIGH RISK"
-        reason = f"AI ko naya pattern samajh nahi aa raha (Probability: {top_prob:.1f}%). Loss ka chance hai."
+        reason = f"Deep AI Ensembles me weak pattern (Probability: {top_prob:.1f}%). Confusion zyada, loss chance high."
         action = "NAHI KHELNA HAI (SKIP)"
         color = "red"
     elif stats['losing_streak'] >= 2:
         risk_status = "MARKET VOLATILE"
-        reason = f"Abhi market unstable chal raha hai ({stats['losing_streak']} prediction fail huye). Trend badalne do."
+        reason = f"Meta-Agents detect market volatility ({stats['losing_streak']} prediction fail huye). Trend stabilize hone ka wait karein."
         action = "WAIT KARO (NO BET)"
         color = "red"
-    elif top_prob >= 28.0 and stats['winning_streak'] >= 1:
-        risk_status = "JACKPOT CHANCE"
-        reason = f"Bahut strong pattern match hua hai ({top_prob:.1f}%). AI winning streak par hai."
+    elif top_prob >= 24.0 and stats['winning_streak'] >= 1:
+        risk_status = "JACKPOT SIGNAL"
+        reason = f"Stacking AI Master Match ({top_prob:.1f}%). Multi-model alignment verified! AI winning streak par hai."
         action = "KHELNA HAI (HIGH BET)"
         color = "green"
-    elif top_prob >= 20.0:
+    elif top_prob >= 18.0:
         risk_status = "GOOD SIGNAL"
-        reason = f"Pattern stable hai ({top_prob:.1f}%). Safely khel sakte hain."
+        reason = f"Pattern practically stable ({top_prob:.1f}%). Ensembles agree kar rahe hain. Standard risk amount khel sakte hain."
         action = "KHELNA HAI (NORMAL BET)"
         color = "gold"
     else:
-        risk_status = "MEDIUM RISK"
-        reason = f"Average chance ({top_prob:.1f}%). Agar zaruri ho tabhi khelo warna wait karo."
+        risk_status = "AVERAGE OPTION"
+        reason = f"Model Confidence okay hai ({top_prob:.1f}%). Sirf jarurat ho tabhi khelo warna chhod do."
         action = "PLAY LIGHT (LOW BET)"
         color = "yellow"
         
