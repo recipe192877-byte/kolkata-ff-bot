@@ -66,6 +66,7 @@ def fetch_month_data(year, month):
                     if match:
                         digits = match.group(1)
                         if len(digits) >= 4:
+                            digits = digits[:4]  # Sanitize
                             patti, single = digits[:3], digits[3]
                         elif len(digits) == 1:
                             single = digits
@@ -124,6 +125,7 @@ def run_deep_scraper():
                     if match:
                         digits = match.group(1)
                         if len(digits) >= 4:
+                            digits = digits[:4]  # Sanitize
                             patti, single = digits[:3], digits[3]
                         elif len(digits) == 1:
                             single = digits

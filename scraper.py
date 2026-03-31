@@ -67,6 +67,7 @@ def scrape_kolkata_ff():
                     if match:
                         digits = match.group(1)
                         if len(digits) >= 4:
+                            digits = digits[:4]  # Sanitize: take only first 4 digits
                             patti, single = digits[:3], digits[3]
                         elif len(digits) == 1:
                             patti, single = None, digits
