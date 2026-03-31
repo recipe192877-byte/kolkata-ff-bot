@@ -10,7 +10,9 @@ MONTHS = [
     "January", "February", "March", "April", "May", "June", 
     "July", "August", "September", "October", "November", "December"
 ]
-YEARS = [2023, 2024, 2025, 2026]
+CURRENT_YEAR = datetime.datetime.now().year
+CURRENT_MONTH = datetime.datetime.now().month
+YEARS = list(range(2023, CURRENT_YEAR + 1))
 URL_PATTERN = "https://kolkataff.tv/old-kolkata-ff-fatafat-result/monthly/index.php?month={}&year={}"
 CSV_FILE = "kolkata_ff_history_advanced.csv"
 
@@ -91,8 +93,9 @@ def run_deep_scraper():
     with ThreadPoolExecutor(max_workers=5) as executor:
         for year in YEARS:
             for month in MONTHS:
-                # Basic optimization: don't fetch future dates
-                if year == 2026 and MONTHS.index(month) > 2: # Stop after March 2026
+                # Dynamic optimization: don't fetch future months
+                month_idx = MONTHS.index(month) + 1  # 1-indexed
+                if year == CURRENT_YEAR and month_idx > CURRENT_MONTH:
                     continue
                 tasks.append(executor.submit(fetch_month_data, year, month))
                 

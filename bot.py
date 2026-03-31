@@ -1,14 +1,17 @@
 import time
 import datetime
 import traceback
+import os
 import scraper
 import predict_ml_v2 as predict_ml
 
 def start_bot():
     print("==================================================")
     print(" KOLKATA FF BACKGROUND WORKER STARTED (WEB MODE)  ")
-    print(" (Scrapes new data & retrains AI every 10 mins)   ")
+    print(" (Scrapes new data & retrains AI every 60 mins)   ")
     print("==================================================")
+    
+    last_record_count = 0
     
     while True:
         try:
@@ -16,11 +19,23 @@ def start_bot():
             # Fetch latest data
             scraper.scrape_kolkata_ff()
             
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Refreshing AI Model with latest data...")
-            predict_ml.train_and_save_model()
+            # Check if data actually changed before expensive retrain
+            import pandas as pd
+            try:
+                df = pd.read_csv(predict_ml.DATA_FILE)
+                current_count = len(df)
+            except:
+                current_count = 0
+                
+            if current_count != last_record_count:
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] New data detected ({current_count} vs {last_record_count}). Retraining AI Model...")
+                predict_ml.train_and_save_model()
+                last_record_count = current_count
+            else:
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] No new data. Skipping retrain. ({current_count} records)")
             
-            # Wait 10 minutes (600 seconds)
-            time.sleep(600)
+            # Wait 60 minutes (3600 seconds) — Stacking model training is expensive
+            time.sleep(3600)
             
         except KeyboardInterrupt:
             print("\nBackground worker stopped manually.")
@@ -28,7 +43,7 @@ def start_bot():
         except Exception as e:
             print(f"Background worker error: {e}")
             traceback.print_exc()
-            time.sleep(60) # Try again in 1 min if error
+            time.sleep(120) # Try again in 2 min if error
 
 if __name__ == "__main__":
     start_bot()

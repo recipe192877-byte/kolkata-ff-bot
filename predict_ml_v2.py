@@ -201,14 +201,74 @@ def train_and_save_model():
     
     return True
 
-def backtest_recent_stats(original_df, features):
-    if os.path.exists(STATS_FILE):
-        try:
-            with open(STATS_FILE, 'r') as f:
-                return json.load(f)
-        except:
-            pass
-    return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
+def backtest_recent_stats(model, features, today_str):
+    """Live computation of recent backtest stats using the loaded model."""
+    X_cols = ['Bazi', 'DayOfWeek', 'Month', 'Is_Weekend', 'MA_7', 'MA_30', 'STD_7', 'Patti_MA_7', 'Prev_1_Single', 'Prev_2_Single', 'Prev_3_Single', 'Prev_4_Single', 'Prev_5_Single', 'Prev_Patti_Sum', 'Rolling_Even_5', 'Prev_Day_Same_Bazi']
+    
+    eval_features = features.tail(30 * 8).copy()
+    if eval_features.empty:
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
+
+    try:
+        X_all = eval_features[X_cols]
+        y_all = eval_features['Target_Single'].values
+        
+        probs = model.predict_proba(X_all)
+        classes = model.classes_
+        
+        matches_list = []
+        for i in range(len(probs)):
+            sorted_indices = probs[i].argsort()[::-1][:3]
+            top_3 = [int(classes[k]) for k in sorted_indices]
+            matches_list.append(1 if int(y_all[i]) in top_3 else 0)
+            
+        matches_series = pd.Series(matches_list, index=eval_features.index)
+        
+        today_mask = (eval_features['Date'] == today_str)
+        today_total = today_mask.sum()
+        
+        if today_total > 0:
+            today_matches_count = matches_series[today_mask].sum()
+        else:
+            last_date = eval_features['Date'].iloc[-1]
+            today_mask = (eval_features['Date'] == last_date)
+            today_matches_count = matches_series[today_mask].sum()
+            today_total = today_mask.sum()
+            
+        unique_dates = eval_features['Date'].unique()
+        last_7_dates = unique_dates[-7:] if len(unique_dates) >= 7 else unique_dates
+        week_mask = eval_features['Date'].isin(last_7_dates)
+        week_matches_count = matches_series[week_mask].sum()
+        week_total = week_mask.sum()
+        
+        prev_correct = bool(matches_list[-1]) if len(matches_list) > 0 else False
+        
+        win_streak = 0
+        for m in reversed(matches_list):
+            if m: win_streak += 1
+            else: break
+            
+        lose_streak = 0
+        for m in reversed(matches_list):
+            if not m: lose_streak += 1
+            else: break
+            
+        return {
+            "today_matches": f"{today_matches_count}/{today_total}",
+            "week_matches": f"{week_matches_count}/{week_total}",
+            "prev_correct": prev_correct,
+            "winning_streak": int(win_streak),
+            "losing_streak": int(lose_streak)
+        }
+    except Exception:
+        # Fallback to cached stats if live computation fails
+        if os.path.exists(STATS_FILE):
+            try:
+                with open(STATS_FILE, 'r') as f:
+                    return json.load(f)
+            except:
+                pass
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
 
 def get_patti_suggestions(original_df, target_single):
     history = original_df[original_df['Single'] == target_single]
@@ -330,7 +390,7 @@ def get_quick_prediction():
     patti_suggestions_2 = get_patti_suggestions(original_df, int(top_3[1][0]))
     patti_suggestions_3 = get_patti_suggestions(original_df, int(top_3[2][0]))
     
-    stats = backtest_recent_stats(original_df, features)
+    stats = backtest_recent_stats(model, features, today_str)
     
     # Enhanced ML Risk Logic
     if next_bazi == 1:

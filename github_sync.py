@@ -5,7 +5,7 @@ import requests
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 REPO_OWNER = "recipe192877-byte"
 REPO_NAME = "kolkata-ff-bot"
-FILE_PATH = "kolkata_ff_history.csv"
+FILE_PATH = "kolkata_ff_history_advanced.csv"
 
 def upload_to_github():
     if not GITHUB_TOKEN:
@@ -35,7 +35,7 @@ def upload_to_github():
         return
 
     data = {
-        "message": "Auto-sync latest Koltata FF results",
+        "message": "Auto-sync latest Kolkata FF results",
         "content": encoded_content
     }
     if sha:
