@@ -4,7 +4,7 @@ import joblib
 import warnings
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import xgboost as xgb
 import lightgbm as lgb
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -515,7 +515,7 @@ def get_patti_suggestions(original_df, target_single):
     return [str(p) for p in top_pattis if pd.notna(p)]
 
 def get_today_prediction_history(save_package, features, original_df):
-    today_obj = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    today_obj = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     today_str = today_obj.strftime('%d/%m/%Y')
     
     today_features = features[features['Date'] == today_str].copy()
@@ -589,7 +589,7 @@ def get_quick_prediction():
     rolling_even_5 = is_even_list.mean()
     
     last_date_str = str(last_record['Date']).strip()
-    today_obj = datetime.utcnow() + timedelta(hours=5, minutes=30)
+    today_obj = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     today_str = today_obj.strftime('%d/%m/%Y')
     
     is_today = (today_str == last_date_str)
