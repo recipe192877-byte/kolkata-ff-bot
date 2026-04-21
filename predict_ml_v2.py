@@ -519,7 +519,15 @@ def get_patti_suggestions(original_df, target_single):
         return []
     patti_counts = history['Patti'].value_counts()
     top_pattis = patti_counts.head(3).index.tolist()
-    return [str(p) for p in top_pattis if pd.notna(p)]
+    suggestions = []
+    for p in top_pattis:
+        if pd.notna(p):
+            try:
+                clean_p = str(int(float(p)))
+                suggestions.append(clean_p.zfill(3))
+            except ValueError:
+                suggestions.append(str(p))
+    return suggestions
 
 def get_today_prediction_history(save_package, features, original_df):
     today_obj = datetime.now(timezone(timedelta(hours=5, minutes=30)))
