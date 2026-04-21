@@ -440,6 +440,7 @@ def backtest_recent_stats(save_package, features, today_str):
     
     try:
         models = save_package['models']
+        freq_model = save_package.get('freq_model', {})
         X_all = eval_features[X_cols]
         y_all = eval_features['Target_Single'].values
         
@@ -456,8 +457,14 @@ def backtest_recent_stats(save_package, features, today_str):
         
         matches_list = []
         for i in range(len(ensemble_probs)):
-            sorted_indices = ensemble_probs[i].argsort()[::-1][:3]
+            bazi = int(eval_features.iloc[i]['Bazi'])
+            day_of_week = eval_features.iloc[i]['Date_Obj'].dayofweek
+            
+            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, ml_weight=0.65)
+            
+            sorted_indices = blended_probs.argsort()[::-1][:3]
             matches_list.append(1 if int(y_all[i]) in sorted_indices else 0)
+
         
         matches_series = pd.Series(matches_list, index=eval_features.index)
         
@@ -526,6 +533,7 @@ def get_today_prediction_history(save_package, features, original_df):
         X_today = today_features[X_cols]
         
         models = save_package['models']
+        freq_model = save_package.get('freq_model', {})
         all_probs = []
         for name, model in models.items():
             probs = model.predict_proba(X_today)
@@ -539,8 +547,11 @@ def get_today_prediction_history(save_package, features, original_df):
         for i, (idx, row) in enumerate(today_features.iterrows()):
             bazi_num = int(row['Bazi'])
             actual = int(row['Target_Single'])
+            day_of_week = row['Date_Obj'].dayofweek
             
-            sorted_indices = ensemble_probs[i].argsort()[::-1][:3]
+            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi_num, day_of_week, ml_weight=0.65)
+            
+            sorted_indices = blended_probs.argsort()[::-1][:3]
             top_3 = [int(k) for k in sorted_indices]
             
             status = "Pass" if actual in top_3 else "Fail"
