@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KFF Predictor | Premium AI</title>
+    <title>KFF Predictor | ULTRA AI Engine</title>
+    <link rel="manifest" href="data:application/json,{%22name%22:%22KFF%20Ultra%22,%22short_name%22:%22KFF%22,%22display%22:%22standalone%22,%22background_color%22:%22%23020617%22,%22theme_color%22:%22%233b82f6%22}">
+    <meta name="theme-color" content="#020617">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -459,6 +461,73 @@
             border: 1px solid rgba(255,255,255,0.05);
         }
 
+        /* Heatmap Grid */
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin-top: 1rem;
+        }
+        .heat-cell {
+            text-align: center;
+            padding: 10px 0;
+            border-radius: 12px;
+            font-weight: 900;
+            font-size: 1.4rem;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.5s ease;
+            position: relative;
+        }
+        .heat-cell .heat-pct {
+            font-size: 0.65rem;
+            font-weight: 500;
+            color: rgba(255,255,255,0.5);
+            display: block;
+            margin-top: 2px;
+        }
+
+        /* Bonus Numbers */
+        .bonus-row {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 0.8rem;
+        }
+        .bonus-num {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 6px 16px;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--text-muted);
+        }
+
+        /* Countdown */
+        .countdown-bar {
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding: 6px;
+            letter-spacing: 1px;
+        }
+        .countdown-bar span {
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        /* Auto-refresh indicator */
+        .auto-badge {
+            font-size: 0.7rem;
+            padding: 3px 8px;
+            border-radius: 8px;
+            background: rgba(59,130,246,0.15);
+            color: var(--primary);
+            border: 1px solid rgba(59,130,246,0.3);
+            cursor: pointer;
+        }
+        .auto-badge.active { background: rgba(16,185,129,0.15); color: var(--accent); border-color: rgba(16,185,129,0.3); }
+
         /* History List Styling */
         .history-item {
             background: rgba(0,0,0,0.3);
@@ -516,10 +585,10 @@
 
     <div class="container">
         <div class="header">
-            <h1>KFF PREDICTOR</h1>
-            <p>Next-Gen Neural Engine</p>
+            <h1>KFF ULTRA</h1>
+            <p>6-Model Quantum Engine</p>
             
-            <div style="display: flex; justify-content: center; gap: 15px; margin-top: 15px; align-items: center;">
+            <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px; align-items: center; flex-wrap: wrap;">
                 <div class="toggle-container" id="prog-toggle" title="Progression Strategy" style="display:flex; align-items:center; gap:8px;">
                     <span class="toggle-label" id="prog-label" style="font-size: 13px; font-weight:900; color:var(--primary); transition:0.3s;">MART</span>
                     <div class="toggle-track" id="prog-track" style="width: 44px; height: 22px; background: rgba(255,255,255,0.1); border-radius: 11px; position: relative; border: 1px solid var(--glass-border); cursor: pointer;">
@@ -529,7 +598,9 @@
                 <div style="font-size: 11px; font-weight:800; color:var(--text-muted); display:flex; align-items:center; background: rgba(0,0,0,0.5); padding: 5px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
                     BASE: 20 PTS
                 </div>
+                <span class="auto-badge" id="autoRefreshBadge" onclick="toggleAutoRefresh()">AUTO: OFF</span>
             </div>
+            <div class="countdown-bar" id="countdownBar">Next refresh: <span id="countdownVal">--</span></div>
         </div>
 
         <button id="predictBtn" class="action-btn" onclick="triggerPrediction()">
@@ -565,6 +636,10 @@
                     <span id="num3">-</span>
                     <div id="patti3" class="patti-suggestion"></div>
                 </div>
+            </div>
+            <div class="bonus-row" id="bonusRow" style="display:none;">
+                <div class="bonus-num" id="num4">-</div>
+                <div class="bonus-num" id="num5">-</div>
             </div>
 
             <!-- Risk Management Component -->
@@ -619,6 +694,12 @@
                 </div>
             </div>
 
+            <!-- Heatmap -->
+            <div id="heatmapBox" class="chart-container hidden" style="margin-top: 1rem;">
+                <div class="stat-label" style="text-align: center; margin-bottom: 0.5rem;">Digit Probability Heatmap</div>
+                <div class="heatmap-grid" id="heatmapGrid"></div>
+            </div>
+
             <!-- Historical Analytics Chart -->
             <div id="chartBox" class="chart-container hidden">
                 <div class="stat-label" style="text-align: center; margin-bottom: 0.5rem;">Live Neural Trend Analysis</div>
@@ -641,10 +722,92 @@
 
     <script>
         let trendChart = null;
-        let progMode = 'MART'; // MART, FIBO, DALE, AUTO
+        let progMode = 'MART';
         const BASE_UNIT = 20;
         const MAX_BET = 1000;
         const FIB = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
+        let autoRefresh = false;
+        let autoTimer = null;
+        let countdownSec = 0;
+        let countdownInterval = null;
+        const AUTO_INTERVAL = 180; // 3 minutes
+
+        function toggleAutoRefresh() {
+            autoRefresh = !autoRefresh;
+            const badge = document.getElementById('autoRefreshBadge');
+            if (autoRefresh) {
+                badge.textContent = 'AUTO: ON';
+                badge.classList.add('active');
+                startAutoRefreshCycle();
+            } else {
+                badge.textContent = 'AUTO: OFF';
+                badge.classList.remove('active');
+                clearInterval(autoTimer);
+                clearInterval(countdownInterval);
+                document.getElementById('countdownVal').textContent = '--';
+            }
+        }
+
+        function startAutoRefreshCycle() {
+            clearInterval(autoTimer);
+            clearInterval(countdownInterval);
+            countdownSec = AUTO_INTERVAL;
+            countdownInterval = setInterval(() => {
+                countdownSec--;
+                const m = Math.floor(countdownSec / 60);
+                const s = countdownSec % 60;
+                document.getElementById('countdownVal').textContent = `${m}:${String(s).padStart(2,'0')}`;
+                if (countdownSec <= 0) countdownSec = AUTO_INTERVAL;
+            }, 1000);
+            autoTimer = setInterval(() => {
+                if (document.visibilityState === 'visible') triggerPrediction();
+                countdownSec = AUTO_INTERVAL;
+            }, AUTO_INTERVAL * 1000);
+        }
+
+        function renderHeatmap(predictions) {
+            const grid = document.getElementById('heatmapGrid');
+            grid.innerHTML = '';
+            document.getElementById('heatmapBox').classList.remove('hidden');
+            const probs = {};
+            predictions.forEach(p => { probs[p.number] = p.probability; });
+            const maxProb = Math.max(...predictions.map(p => p.probability));
+            for (let d = 0; d <= 9; d++) {
+                const cell = document.createElement('div');
+                cell.className = 'heat-cell';
+                const prob = probs[d] || 0;
+                const intensity = prob / (maxProb || 1);
+                if (prob > 0) {
+                    const r = Math.round(59 + intensity * 100);
+                    const g = Math.round(130 - intensity * 80);
+                    const b = Math.round(246 - intensity * 100);
+                    cell.style.background = `rgba(${r},${g},${b},${0.15 + intensity * 0.4})`;
+                    cell.style.borderColor = `rgba(${r},${g},${b},0.5)`;
+                    cell.style.color = `rgb(${r},${g},${b})`;
+                    if (intensity > 0.8) cell.style.boxShadow = `0 0 15px rgba(${r},${g},${b},0.4)`;
+                } else {
+                    cell.style.background = 'rgba(255,255,255,0.02)';
+                    cell.style.color = 'rgba(255,255,255,0.2)';
+                }
+                cell.innerHTML = `${d}<span class="heat-pct">${prob > 0 ? prob.toFixed(1) + '%' : ''}</span>`;
+                grid.appendChild(cell);
+            }
+        }
+
+        function playAlert() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                [800, 1000, 1200].forEach((f, i) => {
+                    const o = ctx.createOscillator();
+                    const g = ctx.createGain();
+                    o.connect(g); g.connect(ctx.destination);
+                    o.frequency.value = f;
+                    g.gain.value = 0.1;
+                    o.start(ctx.currentTime + i * 0.12);
+                    o.stop(ctx.currentTime + i * 0.12 + 0.1);
+                });
+            } catch(e) {}
+        }
 
         function getBetAmount(streak, progType) {
             let mode = progType;
@@ -725,31 +888,25 @@
                             clearInterval(interval);
                             
                             // Final Results
-                            document.getElementById('num1').textContent = data.data.predictions[0].number;
-                            document.getElementById('patti1').textContent = data.data.predictions[0].pattis ? data.data.predictions[0].pattis.join(' • ') : '';
-                            
-                            document.getElementById('num2').textContent = data.data.predictions[1].number;
-                            document.getElementById('patti2').textContent = data.data.predictions[1].pattis ? data.data.predictions[1].pattis.join(' • ') : '';
-                            
-                            document.getElementById('num3').textContent = data.data.predictions[2].number;
-                            document.getElementById('patti3').textContent = data.data.predictions[2].pattis ? data.data.predictions[2].pattis.join(' • ') : '';
-                            
-                            const pct1 = data.data.predictions[0].probability.toFixed(1);
-                            document.getElementById('pct1').textContent = `${pct1}%`;
-                            document.getElementById('bar1').style.width = `${pct1}%`;
-        
-                            const pct2 = data.data.predictions[1].probability.toFixed(1);
-                            document.getElementById('pct2').textContent = `${pct2}%`;
-                            document.getElementById('bar2').style.width = `${pct2}%`;
-                            
-                            const pct3 = data.data.predictions[2].probability.toFixed(1);
-                            document.getElementById('pct3').textContent = `${pct3}%`;
-                            document.getElementById('bar3').style.width = `${pct3}%`;
-                            
-                            // Super Glow for High Probability
-                            if(data.data.predictions[0].probability >= 25.0) document.getElementById('num1').classList.add('super-glow');
-                            if(data.data.predictions[1].probability >= 25.0) document.getElementById('num2').classList.add('super-glow');
-                            if(data.data.predictions[2].probability >= 25.0) document.getElementById('num3').classList.add('super-glow');
+                            // Top 3
+                            for (let i = 0; i < 3; i++) {
+                                document.getElementById('num'+(i+1)).textContent = data.data.predictions[i].number;
+                                document.getElementById('patti'+(i+1)).textContent = data.data.predictions[i].pattis ? data.data.predictions[i].pattis.join(' • ') : '';
+                                const pct = data.data.predictions[i].probability.toFixed(1);
+                                document.getElementById('pct'+(i+1)).textContent = pct+'%';
+                                document.getElementById('bar'+(i+1)).style.width = pct+'%';
+                                if(data.data.predictions[i].probability >= 25.0) document.getElementById('num'+(i+1)).classList.add('super-glow');
+                            }
+                            // Bonus 4 & 5
+                            if (data.data.predictions.length >= 5) {
+                                document.getElementById('bonusRow').style.display = 'flex';
+                                document.getElementById('num4').textContent = data.data.predictions[3].number + ' (' + data.data.predictions[3].probability.toFixed(1) + '%)';
+                                document.getElementById('num5').textContent = data.data.predictions[4].number + ' (' + data.data.predictions[4].probability.toFixed(1) + '%)';
+                            }
+                            // Heatmap
+                            renderHeatmap(data.data.predictions);
+                            // Sound alert on jackpot
+                            if (data.data.risk_management && data.data.risk_management.color === 'green') playAlert();
                         }
                     }, 50);
 

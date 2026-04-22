@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta, timezone
 import xgboost as xgb
 import lightgbm as lgb
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
 warnings.filterwarnings('ignore')
@@ -230,21 +230,27 @@ def create_ensemble_models():
         class_weight='balanced'
     )
     
-    # Gradient Boosting — sklearn variant, different algorithm
+    # Gradient Boosting — sklearn variant
     gb_model = GradientBoostingClassifier(
-        n_estimators=100,
-        max_depth=3,
-        learning_rate=0.03,
-        subsample=0.7,
-        min_samples_leaf=10,
-        random_state=42
+        n_estimators=100, max_depth=3, learning_rate=0.03,
+        subsample=0.7, min_samples_leaf=10, random_state=42
+    )
+    
+    # Extra Trees — extreme randomization
+    et_model = ExtraTreesClassifier(
+        n_estimators=200, max_depth=5, min_samples_leaf=6,
+        max_features='sqrt', random_state=42, class_weight='balanced'
+    )
+    
+    # Hist Gradient Boosting — fast, handles missing values
+    hgb_model = HistGradientBoostingClassifier(
+        max_iter=150, max_depth=4, learning_rate=0.03,
+        min_samples_leaf=10, random_state=42
     )
     
     return {
-        'xgb': xgb_model,
-        'lgb': lgb_model,
-        'rf': rf_model,
-        'gb': gb_model
+        'xgb': xgb_model, 'lgb': lgb_model, 'rf': rf_model,
+        'gb': gb_model, 'et': et_model, 'hgb': hgb_model
     }
 
 def build_frequency_model(df):
@@ -400,7 +406,7 @@ def train_and_save_model():
     }
     
     joblib.dump(save_package, MODEL_FILE)
-    print(f"V3 Deep Ensemble (XGB+LGB+RF+GB + Freq) trained on {len(X)} records and saved successfully.")
+    print(f"V4 ULTRA Ensemble (XGB+LGB+RF+GB+ET+HGB + Freq) trained on {len(X)} records and saved successfully.")
     return True
 
 # ============================================================
@@ -708,10 +714,10 @@ def get_quick_prediction():
     blended_probs = blend_predictions(ml_probs, freq_model, next_bazi, day_of_week, ml_weight=0.65)
     
     sorted_indices = blended_probs.argsort()[::-1]
-    top_3 = [(int(sorted_indices[i]), float(blended_probs[sorted_indices[i]])) for i in range(3)]
-    top_prob = top_3[0][1] * 100
+    top_5 = [(int(sorted_indices[i]), float(blended_probs[sorted_indices[i]])) for i in range(5)]
+    top_prob = top_5[0][1] * 100
     
-    patti_suggestions = [get_patti_suggestions(original_df, t[0]) for t in top_3]
+    patti_suggestions = [get_patti_suggestions(original_df, t[0]) for t in top_5]
     
     stats = backtest_recent_stats(save_package, features, today_str)
     
@@ -728,12 +734,12 @@ def get_quick_prediction():
         color = "red"
     elif stats['losing_streak'] >= 3:
         risk_status = "MARKET VOLATILE"
-        reason = f"4-Model Deep AI detect market volatility ({stats['losing_streak']} prediction fail huye). Trend stabilize hone ka wait karein."
+        reason = f"6-Model Deep AI detect market volatility ({stats['losing_streak']} prediction fail huye). Trend stabilize hone ka wait karein."
         action = "WAIT KARO (NO BET)"
         color = "red"
     elif top_prob >= 20.0 and stats['winning_streak'] >= 1:
         risk_status = "JACKPOT SIGNAL"
-        reason = f"Deep Ensemble Master Match ({top_prob:.1f}%). 4 models + frequency alignment verified! AI winning streak par hai."
+        reason = f"Deep Ensemble Master Match ({top_prob:.1f}%). 6 models + frequency alignment verified! AI winning streak par hai."
         action = "KHELNA HAI (HIGH BET)"
         color = "green"
     elif top_prob >= 15.0:
@@ -759,11 +765,11 @@ def get_quick_prediction():
             "next_bazi": int(next_bazi),
             "predictions": [
                 {
-                    "number": int(top_3[i][0]),
-                    "probability": round(top_3[i][1] * 100, 1),
+                    "number": int(top_5[i][0]),
+                    "probability": round(top_5[i][1] * 100, 1),
                     "pattis": patti_suggestions[i]
                 }
-                for i in range(3)
+                for i in range(5)
             ],
             "risk_management": {
                 "level": risk_status,
@@ -785,8 +791,8 @@ def get_quick_prediction():
 if __name__ == "__main__":
     import time
     print("=" * 60)
-    print("  KOLKATA FF V3 DEEP ENSEMBLE ENGINE")
-    print("  4 Models + Frequency Blending + 56 Features")
+    print("  KOLKATA FF V4 ULTRA ENSEMBLE ENGINE")
+    print("  6 Models + Frequency Blending + 56 Features")
     print("=" * 60)
     t1 = time.time()
     train_and_save_model()

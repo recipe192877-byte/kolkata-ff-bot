@@ -3,9 +3,14 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import re
 import datetime
+import time
+
+MAX_RETRIES = 3
+RETRY_DELAY = 2  # seconds
+
 
 def standardize_date(date_str):
-    """Converts 'SUNDAY, 15 MARCH 2026' or 'WEDNESDAY, 18 MARCH 2026' to '15/03/2026'"""
+    """Converts 'SUNDAY, 15 MARCH 2026' or similar to '15/03/2026'"""
     date_str = date_str.replace('"', '').replace('(', '').replace(')', '').strip()
     
     if re.match(r'\d{2}/\d{2}/\d{4}', date_str):
@@ -27,12 +32,33 @@ def standardize_date(date_str):
         
     return date_str
 
+
+def _fetch_with_retry(url, headers, retries=MAX_RETRIES):
+    """Fetch URL with retry logic and exponential backoff."""
+    for attempt in range(1, retries + 1):
+        try:
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
+            return response
+        except Exception as e:
+            print(f"  Attempt {attempt}/{retries} failed for {url}: {e}")
+            if attempt < retries:
+                wait = RETRY_DELAY * attempt
+                print(f"  Retrying in {wait}s...")
+                time.sleep(wait)
+    return None
+
+
 def scrape_kolkata_ff_in():
     url = "https://kolkataff.in/"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
     all_data = []
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = _fetch_with_retry(url, headers)
+        if not response:
+            print("kolkataff.in: All retries failed.")
+            return []
+            
         soup = BeautifulSoup(response.content, 'html.parser')
         tables = soup.find_all('table')
         for table in tables:
@@ -81,6 +107,8 @@ def scrape_kolkata_ff_in():
     except Exception as e:
         print(f"Error scraping fallback kolkataff.in: {e}")
         return []
+
+
 def scrape_kolkata_ff():
     url = "https://kolkataff.tv/"
     headers = {
@@ -88,56 +116,59 @@ def scrape_kolkata_ff():
     }
     
     all_data = []
+    scrape_ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     try:
-        print("Fetching data from kolkataff.tv...")
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        tables = soup.find_all('table')
-        
-        for table in tables:
-            rows = table.find_all('tr')
-            if len(rows) < 2:
-                continue
-                
-            date_col = rows[0].get_text(strip=True)
-            if "Result Time" in date_col or "Time" in date_col:
-                continue
-                
-            date_col = standardize_date(date_col)
+        print(f"[{scrape_ts}] Fetching data from kolkataff.tv...")
+        response = _fetch_with_retry(url, headers)
+        if not response:
+            print("kolkataff.tv: All retries failed.")
+        else:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            tables = soup.find_all('table')
             
-            cols = rows[1].find_all(['td', 'th'])
-            bazi_results = [c.get_text(strip=True) for c in cols]
-            
-            for bazi_idx, result in enumerate(bazi_results[:8]):
-                bazi_num = bazi_idx + 1
+            for table in tables:
+                rows = table.find_all('tr')
+                if len(rows) < 2:
+                    continue
+                    
+                date_col = rows[0].get_text(strip=True)
+                if "Result Time" in date_col or "Time" in date_col:
+                    continue
+                    
+                date_col = standardize_date(date_col)
                 
-                if result == '--' or 'Refresh' in result or 'Tips' in result or result == '' or result == '-':
-                    patti, single = None, None
-                else:
-                    match = re.search(r'(\d+)', result)
-                    if match:
-                        digits = match.group(1)
-                        if len(digits) >= 4:
-                            digits = digits[:4]  # Sanitize: take only first 4 digits
-                            patti, single = digits[:3], digits[3]
-                        elif len(digits) == 1:
-                            patti, single = None, digits
-                        else:
-                            patti, single = digits, None
-                    else:
+                cols = rows[1].find_all(['td', 'th'])
+                bazi_results = [c.get_text(strip=True) for c in cols]
+                
+                for bazi_idx, result in enumerate(bazi_results[:8]):
+                    bazi_num = bazi_idx + 1
+                    
+                    if result == '--' or 'Refresh' in result or 'Tips' in result or result == '' or result == '-':
                         patti, single = None, None
-                        
-                all_data.append({
-                    'Date': date_col, 'Bazi': bazi_num,
-                    'Result_String': result, 'Patti': patti, 'Single': single
-                })
+                    else:
+                        match = re.search(r'(\d+)', result)
+                        if match:
+                            digits = match.group(1)
+                            if len(digits) >= 4:
+                                digits = digits[:4]
+                                patti, single = digits[:3], digits[3]
+                            elif len(digits) == 1:
+                                patti, single = None, digits
+                            else:
+                                patti, single = digits, None
+                        else:
+                            patti, single = None, None
+                            
+                    all_data.append({
+                        'Date': date_col, 'Bazi': bazi_num,
+                        'Result_String': result, 'Patti': patti, 'Single': single
+                    })
     except Exception as e:
         print(f"Error scraping data from kolkataff.tv: {e}")
         
     try:
+        print(f"[{scrape_ts}] Fetching fallback from kolkataff.in...")
         fallback_data = scrape_kolkata_ff_in()
         if fallback_data:
             all_data.extend(fallback_data)
@@ -159,16 +190,15 @@ def scrape_kolkata_ff():
         try:
             df_old = pd.read_csv(csv_filename)
             combined = pd.concat([df_old, df_new]).drop_duplicates(subset=['Date', 'Bazi'], keep='last')
-            # Sort chronologically
             combined['Date_Obj'] = pd.to_datetime(combined['Date'], format='%d/%m/%Y', errors='coerce')
             combined = combined.sort_values(by=['Date_Obj', 'Bazi'], ascending=[True, True]).drop(columns=['Date_Obj'])
             
             combined.to_csv(csv_filename, index=False)
-            print(f"Successfully scraped {len(df_new)} records. Total in DB: {len(combined)}.")
+            print(f"[{scrape_ts}] Scraped {len(df_new)} records. Total in DB: {len(combined)}.")
             df = combined
         except FileNotFoundError:
             df_new.to_csv(csv_filename, index=False)
-            print(f"Created new database. Scraped {len(df_new)} records.")
+            print(f"[{scrape_ts}] Created new database. Scraped {len(df_new)} records.")
             df = df_new
         
         try:
