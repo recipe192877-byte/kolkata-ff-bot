@@ -181,15 +181,35 @@ def scrape_kolkata_ff():
             
     try:
         df_new = pd.DataFrame(all_data)
-        df_new['Has_Single'] = df_new['Single'].notna()
-        df_new = df_new.sort_values(['Date', 'Bazi', 'Has_Single'])
-        df_new = df_new.drop_duplicates(subset=['Date', 'Bazi'], keep='last').drop(columns=['Has_Single'])
+        
+        # FIX #3: Better dedup — prefer records with both Patti AND Single (most complete)
+        # Add completeness score: records with both patti+single rank higher
+        df_new['_completeness'] = df_new.apply(
+            lambda r: (2 if pd.notna(r.get('Patti')) and str(r.get('Patti', '')).strip() != '' else 0) +
+                      (1 if pd.notna(r.get('Single')) and str(r.get('Single', '')).strip() != '' else 0),
+            axis=1
+        )
+        # Sort by completeness (highest first) so drop_duplicates keeps the best
+        df_new = df_new.sort_values(['Date', 'Bazi', '_completeness'], ascending=[True, True, False])
+        df_new = df_new.drop_duplicates(subset=['Date', 'Bazi'], keep='first')
+        df_new = df_new.drop(columns=['_completeness'], errors='ignore')
         
         csv_filename = 'kolkata_ff_history_advanced.csv'
         
         try:
             df_old = pd.read_csv(csv_filename)
-            combined = pd.concat([df_old, df_new]).drop_duplicates(subset=['Date', 'Bazi'], keep='last')
+            combined = pd.concat([df_old, df_new])
+            
+            # Same completeness-based dedup for the combined dataset
+            combined['_completeness'] = combined.apply(
+                lambda r: (2 if pd.notna(r.get('Patti')) and str(r.get('Patti', '')).strip() != '' else 0) +
+                          (1 if pd.notna(r.get('Single')) and str(r.get('Single', '')).strip() != '' else 0),
+                axis=1
+            )
+            combined = combined.sort_values(['Date', 'Bazi', '_completeness'], ascending=[True, True, False])
+            combined = combined.drop_duplicates(subset=['Date', 'Bazi'], keep='first')
+            combined = combined.drop(columns=['_completeness'], errors='ignore')
+            
             combined['Date_Obj'] = pd.to_datetime(combined['Date'], format='%d/%m/%Y', errors='coerce')
             combined = combined.sort_values(by=['Date_Obj', 'Bazi'], ascending=[True, True]).drop(columns=['Date_Obj'])
             

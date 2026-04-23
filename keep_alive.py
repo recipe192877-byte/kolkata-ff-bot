@@ -56,6 +56,13 @@ def api_predict():
 
 @app.route('/api/retrain')
 def api_retrain():
+    # FIX #5: Basic auth for retrain endpoint
+    retrain_key = os.environ.get("RETRAIN_KEY")
+    if retrain_key:
+        provided_key = request.args.get('key', '')
+        if provided_key != retrain_key:
+            return jsonify({"status": "error", "message": "Unauthorized. Provide ?key=YOUR_RETRAIN_KEY"})
+    
     try:
         success = predict_ml.train_and_save_model()
         _cache.clear()  # Invalidate cache after retrain
@@ -84,10 +91,22 @@ def api_health():
     """Health check endpoint for monitoring."""
     has_model = os.path.exists(predict_ml.MODEL_FILE)
     has_data = os.path.exists(predict_ml.DATA_FILE)
+    
+    # Get OOS accuracy if available
+    oos_accuracy = None
+    if os.path.exists(predict_ml.STATS_FILE):
+        try:
+            with open(predict_ml.STATS_FILE, 'r') as f:
+                stats = json.load(f)
+                oos_accuracy = stats.get('oos_accuracy_pct')
+        except Exception:
+            pass
+    
     return jsonify({
         "status": "ok",
         "model_loaded": has_model,
         "data_available": has_data,
+        "oos_accuracy_pct": oos_accuracy,
         "uptime": int(time.time()),
         "cache_size": len(_cache)
     })
@@ -123,5 +142,6 @@ def run():
     app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
-    t = Thread(target=run)
+    # FIX #1: Set thread as daemon so it dies when main process exits
+    t = Thread(target=run, daemon=True)
     t.start()

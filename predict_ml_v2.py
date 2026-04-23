@@ -386,8 +386,8 @@ def train_and_save_model():
     X = features[X_cols]
     y = features['Target_Single']
     
-    # Train all 4 models on full data
-    print(f"Training 4-Model Ensemble on {len(X)} records...")
+    # Train all 6 models on full data
+    print(f"Training 6-Model Ensemble on {len(X)} records...")
     models = create_ensemble_models()
     trained_models = {}
     
@@ -406,7 +406,7 @@ def train_and_save_model():
     }
     
     joblib.dump(save_package, MODEL_FILE)
-    print(f"V4 ULTRA Ensemble (XGB+LGB+RF+GB+ET+HGB + Freq) trained on {len(X)} records and saved successfully.")
+    print(f"V5 ULTRA Ensemble (XGB+LGB+RF+GB+ET+HGB + Freq) trained on {len(X)} records and saved successfully.")
     return True
 
 # ============================================================
@@ -721,6 +721,16 @@ def get_quick_prediction():
     
     stats = backtest_recent_stats(save_package, features, today_str)
     
+    # Load OOS accuracy from stats file if available
+    oos_accuracy_pct = None
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, 'r') as f:
+                saved_stats = json.load(f)
+                oos_accuracy_pct = saved_stats.get('oos_accuracy_pct')
+        except Exception:
+            pass
+    
     # Enhanced Risk Management
     if next_bazi == 1:
         risk_status = "EXTREME RISK"
@@ -782,7 +792,8 @@ def get_quick_prediction():
                 "today_matches": str(stats['today_matches']),
                 "weekly_matches": str(stats['week_matches']),
                 "winning_streak": int(stats['winning_streak']),
-                "losing_streak": int(stats['losing_streak'])
+                "losing_streak": int(stats['losing_streak']),
+                "oos_accuracy_pct": oos_accuracy_pct
             },
             "history_trend": history_trend
         }
@@ -791,7 +802,7 @@ def get_quick_prediction():
 if __name__ == "__main__":
     import time
     print("=" * 60)
-    print("  KOLKATA FF V4 ULTRA ENSEMBLE ENGINE")
+    print("  KOLKATA FF V5 ULTRA ENSEMBLE ENGINE")
     print("  6 Models + Frequency Blending + 56 Features")
     print("=" * 60)
     t1 = time.time()

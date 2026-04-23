@@ -2,13 +2,14 @@ import time
 import datetime
 import traceback
 import os
+import pandas as pd
 import scraper
 import predict_ml_v2 as predict_ml
 
 def start_bot():
     print("==================================================")
-    print(" KOLKATA FF BACKGROUND WORKER STARTED (WEB MODE)  ")
-    print(" (Scrapes new data & retrains AI every 60 mins)   ")
+    print(" KOLKATA FF BACKGROUND WORKER v2.0 (WEB MODE)     ")
+    print(" 6-Model Ensemble | Auto-Scrape every 60 mins     ")
     print("==================================================")
     
     last_record_count = 0
@@ -20,11 +21,10 @@ def start_bot():
             scraper.scrape_kolkata_ff()
             
             # Check if data actually changed before expensive retrain
-            import pandas as pd
             try:
                 df = pd.read_csv(predict_ml.DATA_FILE)
                 current_count = len(df)
-            except:
+            except Exception:
                 current_count = 0
                 
             if current_count != last_record_count:

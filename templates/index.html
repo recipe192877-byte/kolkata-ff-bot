@@ -586,7 +586,7 @@
     <div class="container">
         <div class="header">
             <h1>KFF ULTRA</h1>
-            <p>6-Model Quantum Engine</p>
+            <p>6-Model Quantum Engine v5.0</p>
             
             <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px; align-items: center; flex-wrap: wrap;">
                 <div class="toggle-container" id="prog-toggle" title="Progression Strategy" style="display:flex; align-items:center; gap:8px;">
@@ -683,15 +683,26 @@
             </div>
             
             <!-- Statistics Grid -->
-            <div id="statsBox" class="stats-grid hidden" style="margin-top: 1.5rem;">
+            <div id="statsBox" class="stats-grid hidden" style="margin-top: 1.5rem; grid-template-columns: 1fr 1fr 1fr;">
                 <div class="stat-card">
-                    <div class="stat-label">Today's Accuracy</div>
+                    <div class="stat-label">Today</div>
                     <div id="statToday" class="stat-value" style="color: var(--accent);">-</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Weekly Accuracy</div>
+                    <div class="stat-label">Weekly</div>
                     <div id="statWeek" class="stat-value" style="color: var(--primary);">-</div>
                 </div>
+                <div class="stat-card">
+                    <div class="stat-label">OOS Accuracy</div>
+                    <div id="statOOS" class="stat-value" style="color: var(--warning);">-</div>
+                </div>
+            </div>
+
+            <!-- Retrain Button -->
+            <div style="margin-top: 1rem; text-align: center;">
+                <button id="retrainBtn" onclick="triggerRetrain()" style="background: rgba(139, 92, 246, 0.2); color: var(--secondary); border: 1px solid rgba(139, 92, 246, 0.4); padding: 8px 20px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; cursor: pointer; font-family: 'Outfit', sans-serif; transition: all 0.3s; letter-spacing: 1px;">
+                    🔄 RETRAIN MODEL
+                </button>
             </div>
 
             <!-- Heatmap -->
@@ -934,6 +945,9 @@
                         const stats = data.data.stats;
                         document.getElementById('statToday').textContent = stats.today_matches;
                         document.getElementById('statWeek').textContent = stats.weekly_matches;
+                        if (stats.oos_accuracy_pct) {
+                            document.getElementById('statOOS').textContent = stats.oos_accuracy_pct + '%';
+                        }
                         document.getElementById('statsBox').classList.remove('hidden');
 
                         // Dynamic Bet Sizing
@@ -1024,6 +1038,7 @@
                             domItem.innerHTML = `
                                 <div class="history-bazi">Bazi ${item.bazi}</div>
                                 <div class="history-preds">${pastPredHtml}</div>
+                                <div style="font-weight:900; font-size:1.1rem; color: ${item.status === 'Pass' ? 'var(--accent)' : 'var(--danger)'}; min-width:25px; text-align:center;">${item.actual}</div>
                                 <div class="history-status ${statusClass}">${item.status}</div>
                             `;
                             historyList.appendChild(domItem);
@@ -1047,6 +1062,35 @@
                 btnText.textContent = "Refresh Prediction";
                 btnLoader.style.display = "none";
             }
+        }
+
+        async function triggerRetrain() {
+            if (!confirm('Retrain the AI model? This may take 30-60 seconds.')) return;
+            const btn = document.getElementById('retrainBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Retraining...';
+            try {
+                const response = await fetch('/api/retrain');
+                const data = await response.json();
+                if (data.status === 'success') {
+                    btn.textContent = '✅ Retrained!';
+                    btn.style.borderColor = 'var(--accent)';
+                    btn.style.color = 'var(--accent)';
+                    setTimeout(() => triggerPrediction(), 1000);
+                } else {
+                    btn.textContent = '❌ ' + (data.message || 'Failed');
+                    btn.style.borderColor = 'var(--danger)';
+                    btn.style.color = 'var(--danger)';
+                }
+            } catch (err) {
+                btn.textContent = '❌ Network error';
+            }
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = '🔄 RETRAIN MODEL';
+                btn.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+                btn.style.color = 'var(--secondary)';
+            }, 5000);
         }
     </script>
 </body>
