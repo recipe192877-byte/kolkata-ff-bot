@@ -89,6 +89,17 @@ def api_retrain():
         return jsonify({"status": "error", "message": f"Retrain error: {str(e)}"})
 
 
+@app.route('/api/heal', methods=['POST'])
+def api_heal():
+    try:
+        from auto_healer import AutoHealer
+        h = AutoHealer()
+        def dummy_callback(msg): print(msg)
+        h.run_daily_maintenance(['predict_ml_v2.py', 'scraper.py', 'keep_alive.py'], dummy_callback, force=True)
+        return jsonify({"status": "success", "message": "Heal scan initiated in background."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Heal error: {str(e)}"})
+
 @app.route('/api/stats')
 def api_stats():
     try:

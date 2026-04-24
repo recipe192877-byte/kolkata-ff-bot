@@ -698,10 +698,13 @@
                 </div>
             </div>
 
-            <!-- Retrain Button -->
-            <div style="margin-top: 1rem; text-align: center;">
-                <button id="retrainBtn" onclick="triggerRetrain()" style="background: rgba(139, 92, 246, 0.2); color: var(--secondary); border: 1px solid rgba(139, 92, 246, 0.4); padding: 8px 20px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; cursor: pointer; font-family: 'Outfit', sans-serif; transition: all 0.3s; letter-spacing: 1px;">
-                    🔄 RETRAIN MODEL
+            <!-- Actions: Retrain & Heal -->
+            <div style="margin-top: 1rem; text-align: center; display: flex; justify-content: center; gap: 10px;">
+                <button id="retrainBtn" onclick="triggerRetrain()" style="background: rgba(139, 92, 246, 0.2); color: var(--secondary); border: 1px solid rgba(139, 92, 246, 0.4); padding: 8px 15px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.3s; letter-spacing: 1px;">
+                    🔄 RETRAIN
+                </button>
+                <button id="healBtn" onclick="triggerHeal()" style="background: rgba(16, 185, 129, 0.2); color: var(--accent); border: 1px solid rgba(16, 185, 129, 0.4); padding: 8px 15px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.3s; letter-spacing: 1px;">
+                    🛠️ HEAL SCAN
                 </button>
             </div>
 
@@ -1087,9 +1090,33 @@
             }
             setTimeout(() => {
                 btn.disabled = false;
-                btn.textContent = '🔄 RETRAIN MODEL';
+                btn.textContent = '🔄 RETRAIN';
                 btn.style.borderColor = 'rgba(139, 92, 246, 0.4)';
                 btn.style.color = 'var(--secondary)';
+            }, 5000);
+        }
+
+        async function triggerHeal() {
+            if (!confirm('Run the autonomous AI Heal Scan?')) return;
+            const btn = document.getElementById('healBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Scanning...';
+            try {
+                const response = await fetch('/api/heal', { method: 'POST' });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    btn.textContent = '✅ Healing Started';
+                    setTimeout(() => alert('Heal scan running in background. Check server logs.'), 500);
+                } else {
+                    btn.textContent = '❌ Failed';
+                    alert(data.message);
+                }
+            } catch (err) {
+                btn.textContent = '❌ Error';
+            }
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = '🛠️ HEAL SCAN';
             }, 5000);
         }
     </script>
