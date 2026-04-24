@@ -8,6 +8,7 @@ import predict_ml_v2 as predict_ml
 
 app = Flask(__name__)
 last_scrape_time = 0
+_scrape_lock = False  # FIX: Prevent concurrent scrapes
 
 # ── Response Cache ──
 _cache = {}
@@ -26,6 +27,22 @@ def _set_cache(key, data):
     _cache[key] = (data, time.time())
 
 
+def _background_scrape():
+    """Run scraper in background thread to avoid Render 30-sec timeout."""
+    global last_scrape_time, _scrape_lock
+    if _scrape_lock:
+        return
+    _scrape_lock = True
+    try:
+        print("Background scrape started...")
+        scraper.scrape_kolkata_ff()
+        last_scrape_time = time.time()
+    except Exception as e:
+        print(f"Background scrape error: {e}")
+    finally:
+        _scrape_lock = False
+
+
 @app.route('/')
 def home():
     return render_template('index.html')
@@ -40,12 +57,10 @@ def api_predict():
         if cached:
             return jsonify(cached)
 
-        # Auto-fetch latest result every 5 minutes max
+        # FIX: Auto-fetch in background thread (non-blocking) to avoid timeout
         current_time = time.time()
         if (current_time - last_scrape_time) > 300:
-            print("Auto-syncing kolkataff.tv latest result before prediction...")
-            scraper.scrape_kolkata_ff()
-            last_scrape_time = current_time
+            Thread(target=_background_scrape, daemon=True).start()
             
         result = predict_ml.get_quick_prediction()
         _set_cache('predict', result)

@@ -89,8 +89,11 @@ def scrape_kolkata_ff_in():
             
             num_bazis = min(len(pattis), len(singles), 8)
             for bazi_idx in range(num_bazis):
-                p = pattis[bazi_idx]
-                s = singles[bazi_idx]
+                try:
+                    p = pattis[bazi_idx]
+                    s = singles[bazi_idx]
+                except IndexError:
+                    continue
                 
                 if not p or not s or 'Tips' in p or 'Tips' in s or p == '' or s == '':
                     continue
