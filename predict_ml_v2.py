@@ -10,7 +10,6 @@ import lightgbm as lgb
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
-from auto_healer import AutoHealer
 warnings.filterwarnings('ignore')
 
 MODEL_FILE = 'xgb_model.joblib'
@@ -777,10 +776,6 @@ def get_quick_prediction():
 
 if __name__ == "__main__":
     import time
-    def silent_callback(msg):
-        print(msg)
-    # healer = AutoHealer()
-    # healer.run_daily_maintenance(['predict_ml_v2.py', 'scraper.py'], silent_callback, force=False)
     
     print("=" * 60)
     print("  KOLKATA FF V3 DEEP ENSEMBLE ENGINE")
