@@ -22,13 +22,14 @@ def standardize_date(date_str):
         else:
             date_part = date_str
             
+        # Remove non-alphanumeric chars and ordinal suffixes (1ST, 2ND, 3RD, 4TH etc.)
         date_part = re.sub(r'[^\w\s]', '', date_part).strip()
+        date_part = re.sub(r'(\d+)(?:ST|ND|RD|TH)', r'\1', date_part, flags=re.IGNORECASE)
         
         dt_obj = datetime.datetime.strptime(date_part, '%d %B %Y')
         return dt_obj.strftime('%d/%m/%Y')
     except Exception as e:
         print(f"Date parse error for '{date_str}': {e}")
-        pass
         
     return date_str
 
@@ -104,7 +105,8 @@ def scrape_kolkata_ff_in():
                     res = p_val + s_val
                     all_data.append({
                         'Date': date_parsed, 'Bazi': bazi_idx + 1,
-                        'Result_String': res, 'Patti': p_val, 'Single': s_val
+                        'Result_String': res, 'Patti': p_val, 'Single': s_val,
+                        'Source': 'kolkataff.in'
                     })
         return all_data
     except Exception as e:
@@ -165,7 +167,8 @@ def scrape_kolkata_ff():
                             
                     all_data.append({
                         'Date': date_col, 'Bazi': bazi_num,
-                        'Result_String': result, 'Patti': patti, 'Single': single
+                        'Result_String': result, 'Patti': patti, 'Single': single,
+                        'Source': 'kolkataff.tv'
                     })
     except Exception as e:
         print(f"Error scraping data from kolkataff.tv: {e}")
@@ -226,9 +229,16 @@ def scrape_kolkata_ff():
         
         try:
             import github_sync
-            github_sync.upload_to_github()
+            from threading import Thread
+            sync_thread = Thread(target=github_sync.upload_to_github, daemon=True)
+            sync_thread.start()
+            sync_thread.join(timeout=30)  # Don't block scraper for more than 30s
+            if sync_thread.is_alive():
+                print("GitHub sync timed out after 30s, continuing...")
         except ImportError:
             pass
+        except Exception as e:
+            print(f"GitHub sync error: {e}")
             
         return df
     except Exception as e:

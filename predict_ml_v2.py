@@ -31,8 +31,11 @@ def extract_patti_digits(patti_val):
     """Extract individual digits from Patti for pattern analysis."""
     if pd.isna(patti_val) or str(patti_val).strip() == '':
         return 0, 0, 0
-    s = str(int(float(patti_val))).zfill(3)
-    return int(s[0]), int(s[1]), int(s[2])
+    try:
+        s = str(int(float(patti_val))).zfill(3)
+        return int(s[0]), int(s[1]), int(s[2])
+    except (ValueError, TypeError):
+        return 0, 0, 0
 
 def compute_gap_features(singles_series, current_idx):
     """Compute how many draws since each digit (0-9) last appeared."""
@@ -509,7 +512,7 @@ def backtest_recent_stats(save_package, features, today_str):
             try:
                 with open(STATS_FILE, 'r') as f:
                     return json.load(f)
-            except:
+            except Exception:
                 pass
         return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
 
@@ -603,7 +606,12 @@ def get_quick_prediction():
     today_obj = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     today_str = today_obj.strftime('%d/%m/%Y')
     
-    is_today = (today_str == last_date_str)
+    # Normalize both dates to dd/mm/yyyy for reliable comparison
+    try:
+        last_date_normalized = pd.to_datetime(last_date_str, format='%d/%m/%Y', dayfirst=True).strftime('%d/%m/%Y')
+    except Exception:
+        last_date_normalized = last_date_str
+    is_today = (today_str == last_date_normalized)
     next_bazi = int(last_record['Bazi']) + 1 if is_today else 1
     
     same_bazi_hist = original_df[original_df['Bazi'] == next_bazi]
@@ -768,7 +776,8 @@ def get_quick_prediction():
                 "today_matches": str(stats['today_matches']),
                 "weekly_matches": str(stats['week_matches']),
                 "winning_streak": int(stats['winning_streak']),
-                "losing_streak": int(stats['losing_streak'])
+                "losing_streak": int(stats['losing_streak']),
+                "oos_accuracy_pct": stats.get('oos_accuracy_pct')
             },
             "history_trend": history_trend
         }
@@ -778,8 +787,8 @@ if __name__ == "__main__":
     import time
     
     print("=" * 60)
-    print("  KOLKATA FF V3 DEEP ENSEMBLE ENGINE")
-    print("  4 Models + Frequency Blending + 56 Features")
+    print("  KOLKATA FF V3 DEEP 4-MODEL ENSEMBLE ENGINE")
+    print("  XGB + LGB + RF + GB + Frequency Blending + 56 Features")
     print("=" * 60)
     t1 = time.time()
     train_and_save_model()

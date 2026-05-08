@@ -1,5 +1,5 @@
 from flask import Flask, render_template, jsonify, request
-from threading import Thread
+from threading import Thread, Lock
 import os
 import time
 import json
@@ -8,11 +8,12 @@ import predict_ml_v2 as predict_ml
 
 app = Flask(__name__)
 last_scrape_time = 0
-_scrape_lock = False  # FIX: Prevent concurrent scrapes
+_scrape_lock = Lock()  # Thread-safe lock to prevent concurrent scrapes
 
-# ── Response Cache ──
+# ── Response Cache (bounded) ──
 _cache = {}
 CACHE_TTL = 60  # seconds
+CACHE_MAX_SIZE = 10  # max entries
 
 
 def _get_cached(key):
@@ -20,19 +21,24 @@ def _get_cached(key):
         data, ts = _cache[key]
         if time.time() - ts < CACHE_TTL:
             return data
+        else:
+            del _cache[key]  # Evict expired entry
     return None
 
 
 def _set_cache(key, data):
+    # Evict oldest entries if cache is full
+    while len(_cache) >= CACHE_MAX_SIZE:
+        oldest_key = min(_cache, key=lambda k: _cache[k][1])
+        del _cache[oldest_key]
     _cache[key] = (data, time.time())
 
 
 def _background_scrape():
     """Run scraper in background thread to avoid Render 30-sec timeout."""
-    global last_scrape_time, _scrape_lock
-    if _scrape_lock:
-        return
-    _scrape_lock = True
+    global last_scrape_time
+    if not _scrape_lock.acquire(blocking=False):
+        return  # Another scrape is already running
     try:
         print("Background scrape started...")
         scraper.scrape_kolkata_ff()
@@ -40,7 +46,7 @@ def _background_scrape():
     except Exception as e:
         print(f"Background scrape error: {e}")
     finally:
-        _scrape_lock = False
+        _scrape_lock.release()
 
 
 @app.route('/')
@@ -130,7 +136,7 @@ def api_health():
 
 @app.route('/api/heatmap')
 def api_heatmap():
-    """Return digit probability distribution for heatmap display."""
+    """Return full 10-digit probability distribution for heatmap display."""
     try:
         cached = _get_cached('heatmap')
         if cached:
@@ -140,9 +146,9 @@ def api_heatmap():
         if result['status'] != 'success':
             return jsonify(result)
 
-        # Build heatmap from predictions
+        # Build heatmap from predictions — fill all 10 digits
         preds = result['data']['predictions']
-        heatmap = {}
+        heatmap = {str(d): 0.0 for d in range(10)}  # Initialize all digits to 0
         for p in preds:
             heatmap[str(p['number'])] = p['probability']
 

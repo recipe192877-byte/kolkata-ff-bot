@@ -586,7 +586,7 @@
     <div class="container">
         <div class="header">
             <h1>KFF ULTRA</h1>
-            <p>6-Model Quantum Engine v5.0</p>
+            <p>4-Model Deep Ensemble Engine v5.0</p>
             
             <div style="display: flex; justify-content: center; gap: 10px; margin-top: 15px; align-items: center; flex-wrap: wrap;">
                 <div class="toggle-container" id="prog-toggle" title="Progression Strategy" style="display:flex; align-items:center; gap:8px;">
@@ -945,8 +945,10 @@
                         const stats = data.data.stats;
                         document.getElementById('statToday').textContent = stats.today_matches;
                         document.getElementById('statWeek').textContent = stats.weekly_matches;
-                        if (stats.oos_accuracy_pct) {
+                        if (stats.oos_accuracy_pct !== undefined && stats.oos_accuracy_pct !== null) {
                             document.getElementById('statOOS').textContent = stats.oos_accuracy_pct + '%';
+                        } else {
+                            document.getElementById('statOOS').textContent = 'N/A';
                         }
                         document.getElementById('statsBox').classList.remove('hidden');
 

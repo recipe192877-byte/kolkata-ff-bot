@@ -9,7 +9,7 @@ import predict_ml_v2 as predict_ml
 def start_bot():
     print("==================================================")
     print(" KOLKATA FF BACKGROUND WORKER v2.0 (WEB MODE)     ")
-    print(" 6-Model Ensemble | Auto-Scrape every 60 mins     ")
+    print(" 4-Model Ensemble | Auto-Scrape every 60 mins     ")
     print("==================================================")
     
     last_record_count = 0
