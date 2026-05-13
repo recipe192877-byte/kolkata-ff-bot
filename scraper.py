@@ -20,20 +20,31 @@ def standardize_date(date_str):
         
     try:
         # Extract the date part, handling cases with/without day of the week
-        if ',' in date_str:
-            date_part = date_str.split(',', 1)[1].strip() # Split only on first comma
+        # Use regex to find and extract the most likely date part
+        match = re.search(r'(\d+)\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\w*\s+(\d{4})', date_str, re.IGNORECASE)
+        if match:
+            # Reconstruct the string for strptime
+            date_part = f"{match.group(1)} {match.group(2)}" # Day and Year
+            # Find the month name from the original string
+            month_match = re.search(r'(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\w*', date_str, re.IGNORECASE)
+            if month_match:
+                date_part = f"{match.group(1)} {month_match.group(0)} {match.group(2)}"
         else:
-            date_part = date_str
+            # Fallback to previous logic if regex fails
+            if ',' in date_str:
+                date_part = date_str.split(',', 1)[1].strip() # Split only on first comma
+            else:
+                date_part = date_str
             
-        # Remove non-alphanumeric chars (except spaces) and ordinal suffixes (1ST, 2ND, 3RD, 4TH etc.)
-        date_part = re.sub(r'[^\w\s]', '', date_part).strip()
-        date_part = re.sub(r'(\d+)(?:ST|ND|RD|TH)', r'\1', date_part, flags=re.IGNORECASE)
+            # Remove non-alphanumeric chars (except spaces) and ordinal suffixes (1ST, 2ND, 3RD, 4TH etc.)
+            date_part = re.sub(r'[^\w\s]', '', date_part).strip()
+            date_part = re.sub(r'(\d+)(?:ST|ND|RD|TH)', r'\1', date_part, flags=re.IGNORECASE)
         
         # Try parsing with various common date formats
         formats = [
             '%d %B %Y',  # 15 March 2026
             '%d %b %Y',  # 15 Mar 2026
-            '%Y-%m-%d',  # 2026-03-15 (less common for this source, but good to have)
+            '%Y-%m-%d',  # 2026-03-15
             '%m/%d/%Y'   # 03/15/2026
         ]
         
@@ -57,7 +68,7 @@ def _fetch_with_retry(url, headers, retries=MAX_RETRIES):
     """Fetch URL with retry logic and exponential backoff.
     Adds random jitter to retry delay and logs HTTP status codes.
     """
-    import random # Import inside function to keep global namespace clean for RuFlo if it's meant to be truly minimal.
+    import random 
     
     for attempt in range(1, retries + 1):
         try:
@@ -109,7 +120,7 @@ def scrape_kolkata_ff_in():
             has_bazi_header = False
             if len(rows) >= 2:
                 header_text = rows[1].get_text(strip=True).replace(' ', '').upper()
-                if '1234' in header_text or 'BAZI' in header_text:
+                if '1234' in header_text or 'BAZI' in header_text or 'बाजि' in header_text: # Added Bengali "bazi"
                     has_bazi_header = True
             
             if has_bazi_header and len(rows) >= 4:
@@ -216,23 +227,27 @@ def scrape_kolkata_ff():
                     result_str_cleaned = result_str.strip()
                     if result_str_cleaned in ('--', '', '-', 'Refresh', 'Tips'):
                         patti, single = None, None
+                        result_string_to_store = "" # Store empty string if no valid result
                     else:
                         # Extract digits using regex
                         digits = re.sub(r'\D', '', result_str_cleaned) # Remove all non-digits
                         
                         patti, single = None, None
+                        result_string_to_store = result_str_cleaned # Default to original cleaned string
                         
                         if len(digits) == 4:
                             patti = digits[:3]
                             single = digits[3]
+                            result_string_to_store = digits # Store just digits for 4-digit results
                         elif len(digits) == 1:
                             single = digits
+                            result_string_to_store = digits # Store just digit for 1-digit results
                         # Cases like "123" or "12" or >4 digits are ambiguous or malformed on this site for P/S
                         # We prioritize 4-digit (Patti+Single) or 1-digit (Single only)
                         
                     all_data.append({
                         'Date': date_col, 'Bazi': bazi_num,
-                        'Result_String': result_str.strip(), # Keep original string for debug if needed
+                        'Result_String': result_string_to_store, # Store processed string
                         'Patti': patti, 'Single': single,
                         'Source': 'kolkataff.tv'
                     })
@@ -266,7 +281,7 @@ def scrape_kolkata_ff():
             axis=1
         )
         # Sort by completeness (highest first) so drop_duplicates keeps the best
-        df_new = df_new.sort_values(['Date', 'Bazi', '_completeness'], ascending=[True, True, False])
+        df_new = df_new.sort_values(['Date', 'Bazi', '_completeness', 'Source'], ascending=[True, True, False, False]) # Prefer .tv over .in if completeness is same
         df_new = df_new.drop_duplicates(subset=['Date', 'Bazi'], keep='first')
         df_new = df_new.drop(columns=['_completeness'], errors='ignore')
         
@@ -292,7 +307,7 @@ def scrape_kolkata_ff():
                 )
                 
                 # Sort first by date and bazi to group, then by completeness to prioritize
-                combined = combined.sort_values(['Date', 'Bazi', '_completeness'], ascending=[True, True, False])
+                combined = combined.sort_values(['Date', 'Bazi', '_completeness', 'Source'], ascending=[True, True, False, False]) # Prefer .tv over .in
                 combined = combined.drop_duplicates(subset=['Date', 'Bazi'], keep='first')
                 combined = combined.drop(columns=['_completeness'], errors='ignore')
                 
