@@ -82,7 +82,7 @@ Here is the code:
                     'X-Title': 'Kolkata FF Autonomous Upgrader'
                 },
                 json={
-                    'model': 'google/gemini-2.5-flash', # Or another capable coder model
+                    'model': 'google/gemini-2.0-flash-exp:free', # Using free model fallback
                     'messages': [
                         {'role': 'system', 'content': 'You are RuFlo, a master autonomous coding agent. Return ONLY raw, perfectly valid Python code. No markdown formatting.'},
                         {'role': 'user', 'content': prompt}
@@ -159,7 +159,7 @@ IMPORTANT: If you modify a file, you MUST provide the ENTIRE file's code, not ju
                     'X-Title': 'Kolkata FF Autonomous Upgrader'
                 },
                 json={
-                    'model': 'google/gemini-2.5-flash',
+                    'model': 'google/gemini-2.0-flash-exp:free',
                     'messages': [
                         {'role': 'system', 'content': 'You are RuFlo, a master autonomous coding agent. Return ONLY raw, valid JSON.'},
                         {'role': 'user', 'content': prompt}
