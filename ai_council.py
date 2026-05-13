@@ -78,10 +78,21 @@ class AICouncil:
         models_to_try = [model]
         if 'free' in model:
             models_to_try = [
+                'google/gemma-3-27b-it:free',
+                'google/gemma-4-27b-it:free',
                 'google/gemini-2.0-flash-exp:free',
-                'google/gemini-2.0-pro-exp-02-05:free',
-                'mistralai/pixtral-12b:free',
-                'openrouter/free'
+                'google/gemini-2.5-flash-preview:free',
+                'meta-llama/llama-4-maverick:free',
+                'meta-llama/llama-3.3-70b-instruct:free',
+                'mistralai/mistral-small-3.1-24b-instruct:free',
+                'qwen/qwen3-32b:free',
+                'qwen/qwen-2.5-72b-instruct:free',
+                'deepseek/deepseek-chat:free',
+                'deepseek/deepseek-r1:free',
+                'nvidia/llama-3.1-nemotron-70b-instruct:free',
+                'microsoft/phi-4-reasoning:free',
+                'nousresearch/hermes-3-llama-3.1-405b:free',
+                'openrouter/free',
             ]
 
         for target_model in models_to_try:
