@@ -1279,5 +1279,249 @@
         };
 
     </script>
+    </script>
+
+    <!-- RuFlo Interactive Chat Widget -->
+    <style>
+        .ruflo-chat-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 30px;
+            background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4);
+            z-index: 9999;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .ruflo-chat-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 25px rgba(139, 92, 246, 0.6);
+        }
+        .ruflo-chat-window {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            width: 350px;
+            height: 500px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            z-index: 9998;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            transition: opacity 0.3s;
+            opacity: 0;
+        }
+        .ruflo-chat-window.active {
+            display: flex;
+            opacity: 1;
+        }
+        .ruflo-chat-header {
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .ruflo-chat-header .title {
+            color: white;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .ruflo-chat-header .title span {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px #10b981;
+        }
+        .ruflo-chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .msg {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        .msg.user {
+            background: #3b82f6;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+        .msg.ai {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e2e8f0;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+        }
+        .msg.ai-mod {
+            border-left: 3px solid #10b981;
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 4px;
+            background: rgba(16, 185, 129, 0.1);
+        }
+        .ruflo-chat-input {
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            gap: 10px;
+        }
+        .ruflo-chat-input input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 8px 15px;
+            color: white;
+            outline: none;
+            font-family: inherit;
+        }
+        .ruflo-chat-input input:focus {
+            border-color: #3b82f6;
+        }
+        .ruflo-chat-input button {
+            background: #3b82f6;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ruflo-chat-input button:hover {
+            background: #2563eb;
+        }
+        .typing-indicator {
+            display: none;
+            color: #94a3b8;
+            font-size: 12px;
+            align-self: flex-start;
+            padding: 5px 10px;
+        }
+    </style>
+
+    <div class="ruflo-chat-btn" id="rufloChatBtn" onclick="toggleRuFloChat()">
+        💬
+    </div>
+
+    <div class="ruflo-chat-window" id="rufloChatWindow">
+        <div class="ruflo-chat-header">
+            <div class="title"><span></span> RuFlo Terminal</div>
+            <button onclick="toggleRuFloChat()" style="background:none; border:none; color:#94a3b8; cursor:pointer; font-size:18px;">&times;</button>
+        </div>
+        <div class="ruflo-chat-messages" id="rufloMessages">
+            <div class="msg ai">Hello! I am RuFlo, the autonomous code upgrader. You can ask me questions or command me to rewrite the bot's code. How can I help?</div>
+        </div>
+        <div class="typing-indicator" id="rufloTyping">RuFlo is thinking and analyzing code...</div>
+        <div class="ruflo-chat-input">
+            <input type="text" id="rufloInput" placeholder="Command RuFlo..." onkeypress="if(event.key === 'Enter') sendRuFloMessage()">
+            <button onclick="sendRuFloMessage()">➤</button>
+        </div>
+    </div>
+
+    <script>
+        function toggleRuFloChat() {
+            const win = document.getElementById('rufloChatWindow');
+            if (win.classList.contains('active')) {
+                win.classList.remove('active');
+            } else {
+                win.classList.add('active');
+                document.getElementById('rufloInput').focus();
+            }
+        }
+
+        async function sendRuFloMessage() {
+            const input = document.getElementById('rufloInput');
+            const msgText = input.value.trim();
+            if (!msgText) return;
+
+            const messagesDiv = document.getElementById('rufloMessages');
+            
+            // Add user message
+            const userMsg = document.createElement('div');
+            userMsg.className = 'msg user';
+            userMsg.textContent = msgText;
+            messagesDiv.appendChild(userMsg);
+            
+            input.value = '';
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+            // Show typing
+            const typing = document.getElementById('rufloTyping');
+            typing.style.display = 'block';
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msgText })
+                });
+                
+                const data = await response.json();
+                typing.style.display = 'none';
+
+                if (data.status === 'success') {
+                    // AI Reply
+                    const aiMsg = document.createElement('div');
+                    aiMsg.className = 'msg ai';
+                    aiMsg.textContent = data.reply;
+                    messagesDiv.appendChild(aiMsg);
+
+                    // Show modifications if any
+                    if (data.files_modified && data.files_modified.length > 0) {
+                        const modMsg = document.createElement('div');
+                        modMsg.className = 'msg ai ai-mod';
+                        modMsg.innerHTML = `⚙️ <b>Files Overwritten & Pushed:</b><br>${data.files_modified.join(', ')}`;
+                        messagesDiv.appendChild(modMsg);
+                    }
+                } else {
+                    const errMsg = document.createElement('div');
+                    errMsg.className = 'msg ai';
+                    errMsg.style.color = '#ef4444';
+                    errMsg.textContent = 'Error: ' + data.message;
+                    messagesDiv.appendChild(errMsg);
+                }
+            } catch (err) {
+                typing.style.display = 'none';
+                const errMsg = document.createElement('div');
+                errMsg.className = 'msg ai';
+                errMsg.style.color = '#ef4444';
+                errMsg.textContent = 'Network error communicating with RuFlo API.';
+                messagesDiv.appendChild(errMsg);
+            }
+            
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
 </body>
 </html>

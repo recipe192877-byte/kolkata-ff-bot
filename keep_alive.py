@@ -5,8 +5,10 @@ import time
 import json
 import scraper
 import predict_ml_v2 as predict_ml
-from auto_healer import healer
+from ruflo_healer import RuFloHealer
 from ai_council import council
+
+ruflo_upgrader = RuFloHealer()
 
 app = Flask(__name__)
 last_scrape_time = 0
@@ -132,10 +134,21 @@ def api_health():
         "data_available": has_data,
         "oos_accuracy_pct": oos_accuracy,
         "brain_capacity": predict_ml.brain.get_brain_capacity(),
-        "healer": healer.get_status(),
+        "healer": "RuFlo Autonomous Code Upgrader is ACTIVE",
         "uptime": int(time.time()),
         "cache_size": len(_cache)
     })
+
+def _daily_ruflo_scan():
+    """Background loop that runs RuFlo Healer once a day."""
+    while True:
+        try:
+            print("[BACKGROUND] Triggering daily RuFlo Autonomous Code Upgrade...")
+            ruflo_upgrader.scan_and_upgrade()
+            time.sleep(86400) # Sleep for 24 hours
+        except Exception as e:
+            print(f"[BACKGROUND] Daily RuFlo Scan failed: {e}")
+            time.sleep(3600) # Retry in 1 hour on failure
 
 
 @app.route('/api/heatmap')
@@ -165,20 +178,41 @@ def api_heatmap():
 
 @app.route('/api/heal')
 def api_heal():
-    """View the Auto-Healer log — shows all diagnosed errors."""
+    """Manual trigger for RuFlo Autonomous Code Scan."""
     try:
-        log = healer.get_log()
-        status = healer.get_status()
-        return jsonify({"status": "success", "healer_status": status, "heal_log": log})
+        # Start a background thread so we don't block the API response
+        Thread(target=ruflo_upgrader.scan_and_upgrade, daemon=True).start()
+        return jsonify({"status": "success", "message": "RuFlo Autonomous Code Upgrade scan has been manually triggered in the background."})
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Heal log error: {str(e)}"})
+        return jsonify({"status": "error", "message": f"Heal trigger error: {str(e)}"})
 
 
 @app.route('/api/heal/status')
 def api_heal_status():
     """Check Auto-Healer health."""
     try:
-        return jsonify({"status": "success", "data": healer.get_status()})
+        return jsonify({"status": "success", "data": "RuFlo Autonomous Upgrader is Online and Active."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
+    """Interactive RuFlo Chat for coding and modifications."""
+    try:
+        data = request.json
+        if not data or 'message' not in data:
+            return jsonify({"status": "error", "message": "No message provided."})
+            
+        user_message = data['message']
+        # This might take a while if files are modified, so we do it synchronously for now 
+        # because the frontend will show a typing indicator
+        result = ruflo_upgrader.chat_and_execute(user_message)
+        
+        return jsonify({
+            "status": "success",
+            "reply": result.get("reply", "Done."),
+            "files_modified": [mod.get("filename") for mod in result.get("modifications", [])]
+        })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
@@ -244,6 +278,10 @@ def run():
     app.run(host='0.0.0.0', port=port)
 
 def keep_alive():
-    # FIX #1: Set thread as daemon so it dies when main process exits
+    # Set web server thread as daemon so it dies when main process exits
     t = Thread(target=run, daemon=True)
     t.start()
+    
+    # Start the Daily RuFlo Code Upgrade Scanner
+    t_ruflo = Thread(target=_daily_ruflo_scan, daemon=True)
+    t_ruflo.start()
