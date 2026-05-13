@@ -69,6 +69,10 @@ def start_bot():
             elif current_count < last_record_count:
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Data count decreased ({current_count} vs {last_record_count}). This shouldn't happen. Re-initializing last_record_count.")
                 last_record_count = current_count
+                # Even if data count decreased, we should still retrain IF current_count > 0.
+                # A decrease in data might mean some data was cleaned or removed, which could also warrant a retrain.
+                # But for the purpose of "only retrain on new data" as per comment, we won't retrain here.
+                # If the underlying cause is data corruption, a later scrape will hopefully fix it.
             else:
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%M')}] No new data. Skipping retrain. ({current_count} records)")
             
@@ -106,8 +110,8 @@ def start_bot():
 
                         last_evolution_date = current_date
                     else:
-                        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Not enough data for yesterday to run AI Evolution or stats not available.")
-                        last_evolution_date = current_date # Mark as run to avoid re-running on same day if no data
+                        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Not enough data for yesterday to run AI Evolution or stats not available. Proceeding with last_evolution_date update.")
+                        last_evolution_date = current_date # Mark as run to avoid re-running on same day if not enough data
                 except ImportError:
                     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] AI Council module not found. Skipping daily evolution.")
                 except Exception as evo_err:
@@ -135,6 +139,7 @@ def start_bot():
                 time.sleep(600)
             else:
                 # Exponential backoff: 2min, 4min, 8min, etc. up to 10 minutes (600s)
+                # Modified to start from 120s if consecutive_failures is 1
                 wait_time = min(120 * (2 ** (consecutive_failures - 1)), 600)
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Retrying in {wait_time}s...")
                 time.sleep(wait_time)
