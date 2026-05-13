@@ -5,18 +5,12 @@ import os
 import pandas as pd
 import scraper
 import predict_ml_v2 as predict_ml
-from auto_healer import self_healing, healer
-
-
-@self_healing(max_retries=2, fallback_value=None)
 def safe_scrape():
-    """Scrape with auto-healing — if scraper crashes, AI diagnoses the issue."""
+    """Scrape directly, AI diagnosis is now handled by RuFlo Upgrader daily."""
     return scraper.scrape_kolkata_ff()
 
-
-@self_healing(max_retries=1, fallback_value=False)
 def safe_retrain():
-    """Retrain with auto-healing — if model training crashes, AI diagnoses."""
+    """Retrain directly, AI diagnosis is now handled by RuFlo Upgrader daily."""
     return predict_ml.train_and_save_model()
 
 
@@ -26,7 +20,7 @@ def start_bot():
     print(" 4-Model Ensemble | Vector Memory | Auto-Healer   ")
     print("==================================================")
     print(f" Brain Capacity: {predict_ml.brain.get_brain_capacity()} patterns")
-    print(f" Healer Status:  {'ONLINE' if healer.api_key else 'NO API KEY (set OPENROUTER_API_KEY)'}")
+    print(f" Healer Status:  {'ONLINE' if os.environ.get('OPENROUTER_API_KEY') else 'NO API KEY (set OPENROUTER_API_KEY)'}")
     print("==================================================")
     
     last_record_count = 0
