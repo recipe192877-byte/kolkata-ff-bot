@@ -70,41 +70,51 @@ class AICouncil:
         self.meeting_log = []
 
     def _call_ai(self, model, system_prompt, user_prompt, max_tokens=300):
-        """Call a single AI model via OpenRouter."""
+        """Call AI models with fallback support."""
         if not self.api_key:
             return None
 
-        try:
-            response = requests.post(
-                OPENROUTER_URL,
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {self.api_key}',
-                    'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
-                    'X-Title': 'Kolkata FF AI Council'
-                },
-                json={
-                    'model': model,
-                    'messages': [
-                        {'role': 'system', 'content': system_prompt},
-                        {'role': 'user', 'content': user_prompt}
-                    ],
-                    'max_tokens': max_tokens,
-                    'temperature': 0.7
-                },
-                timeout=30
-            )
+        # Fallback list for free models
+        models_to_try = [model]
+        if 'free' in model:
+            models_to_try = [
+                'google/gemini-2.0-flash-exp:free',
+                'google/gemini-2.0-pro-exp-02-05:free',
+                'mistralai/pixtral-12b:free',
+                'openrouter/free'
+            ]
 
-            if response.status_code == 200:
-                data = response.json()
-                return data.get('choices', [{}])[0].get('message', {}).get('content', '')
-            else:
-                print(f"[COUNCIL] API error {response.status_code} for model {model}")
-                return None
+        for target_model in models_to_try:
+            try:
+                response = requests.post(
+                    OPENROUTER_URL,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Authorization': f'Bearer {self.api_key}',
+                        'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
+                        'X-Title': 'Kolkata FF AI Council'
+                    },
+                    json={
+                        'model': target_model,
+                        'messages': [
+                            {'role': 'system', 'content': system_prompt},
+                            {'role': 'user', 'content': user_prompt}
+                        ],
+                        'max_tokens': max_tokens,
+                        'temperature': 0.7
+                    },
+                    timeout=30
+                )
 
-        except Exception as e:
-            print(f"[COUNCIL] Error calling {model}: {e}")
-            return None
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                else:
+                    print(f"[COUNCIL] {target_model} failed ({response.status_code}). Trying fallback...")
+            except Exception as e:
+                print(f"[COUNCIL] Error calling {target_model}: {e}")
+        
+        return None
 
     def _build_data_prompt(self, prediction_data):
         """Build the data context prompt from current prediction state."""

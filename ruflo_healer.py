@@ -8,6 +8,16 @@ OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 # Target files to autonomously rewrite
 TARGET_FILES = ['predict_ml_v2.py', 'scraper.py', 'bot.py', 'keep_alive.py']
 
+# Multi-model fallback list (Free models)
+FREE_MODELS = [
+    'google/gemini-2.0-flash-exp:free',
+    'google/gemini-2.0-pro-exp-02-05:free',
+    'mistralai/pixtral-12b:free',
+    'qwen/qwen-2-7b-instruct:free',
+    'meta-llama/llama-3.1-8b-instruct:free',
+    'microsoft/phi-3-mini-128k-instruct:free'
+]
+
 class RuFloHealer:
     """
     Autonomous code upgrader. Reads source files, asks RuFlo AI to improve them,
@@ -73,35 +83,40 @@ Here is the code:
 {original_code}
 """
         try:
-            response = requests.post(
-                OPENROUTER_URL,
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {self.api_key}',
-                    'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
-                    'X-Title': 'Kolkata FF Autonomous Upgrader'
-                },
-                json={
-                    'model': 'google/gemini-2.0-flash-exp:free', # Using free model fallback
-                    'messages': [
-                        {'role': 'system', 'content': 'You are RuFlo, a master autonomous coding agent. Return ONLY raw, perfectly valid Python code. No markdown formatting.'},
-                        {'role': 'user', 'content': prompt}
-                    ],
-                    'max_tokens': 8000 # Need high token limit to return full files
-                },
-                timeout=120 # AI needs time to read and rewrite entire files
-            )
+            for model in FREE_MODELS:
+                print(f"[RUFLO_HEALER] Attempting upgrade with model: {model}")
+                response = requests.post(
+                    OPENROUTER_URL,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Authorization': f'Bearer {self.api_key}',
+                        'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
+                        'X-Title': 'Kolkata FF Autonomous Upgrader'
+                    },
+                    json={
+                        'model': model,
+                        'messages': [
+                            {'role': 'system', 'content': 'You are RuFlo, a master autonomous coding agent. Return ONLY raw, perfectly valid Python code. No markdown formatting.'},
+                            {'role': 'user', 'content': prompt}
+                        ],
+                        'max_tokens': 8000 
+                    },
+                    timeout=120
+                )
 
-            if response.status_code == 200:
-                data = response.json()
-                new_code = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-                
-                # Strip potential markdown artifacts just in case AI disobeys
-                new_code = new_code.replace("```python", "").replace("```", "").strip()
-                return new_code
-            else:
-                print(f"API Error {response.status_code}: {response.text[:200]}")
-                return None
+                if response.status_code == 200:
+                    data = response.json()
+                    new_code = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    new_code = new_code.replace("```python", "").replace("```", "").strip()
+                    if len(new_code) > 100: 
+                        return new_code
+                else:
+                    print(f"Model {model} failed. Trying next...")
+            
+            return None
+        except Exception as e:
+            print(f"[RUFLO_HEALER] AI call failed: {str(e)}")
+            return None
 
         except Exception as e:
             print(f"[RUFLO_HEALER] AI call failed: {str(e)}")
@@ -150,57 +165,58 @@ If no modifications are needed, leave the "modifications" array empty.
 IMPORTANT: If you modify a file, you MUST provide the ENTIRE file's code, not just snippets.
 """
         try:
-            response = requests.post(
-                OPENROUTER_URL,
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': f'Bearer {self.api_key}',
-                    'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
-                    'X-Title': 'Kolkata FF Autonomous Upgrader'
-                },
-                json={
-                    'model': 'google/gemini-2.0-flash-exp:free',
-                    'messages': [
-                        {'role': 'system', 'content': 'You are RuFlo, a master autonomous coding agent. Return ONLY raw, valid JSON.'},
-                        {'role': 'user', 'content': prompt}
-                    ],
-                    'max_tokens': 15000 
-                },
-                timeout=120
-            )
+            for model in FREE_MODELS:
+                print(f"[RUFLO_CHAT] Attempting chat with model: {model}")
+                response = requests.post(
+                    OPENROUTER_URL,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Authorization': f'Bearer {self.api_key}',
+                        'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
+                        'X-Title': 'Kolkata FF Autonomous Upgrader'
+                    },
+                    json={
+                        'model': model,
+                        'messages': [
+                            {'role': 'system', 'content': 'You are RuFlo, a master autonomous coding agent. Return ONLY raw, valid JSON.'},
+                            {'role': 'user', 'content': prompt}
+                        ],
+                        'max_tokens': 15000 
+                    },
+                    timeout=120
+                )
 
-            if response.status_code == 200:
-                data = response.json()
-                content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-                
-                # Parse JSON
-                content = content.replace("```json", "").replace("```", "").strip()
-                try:
-                    result = json.loads(content)
-                except json.JSONDecodeError:
-                    return {"reply": "Error: RuFlo returned an invalid JSON response. Please try your command again.", "modifications": []}
+                if response.status_code == 200:
+                    data = response.json()
+                    content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    content = content.replace("```json", "").replace("```", "").strip()
+                    try:
+                        result = json.loads(content)
+                        
+                        # Apply modifications if any
+                        modifications = result.get("modifications", [])
+                        for mod in modifications:
+                            filename = mod.get("filename")
+                            code = mod.get("code")
+                            if filename and code and ("def " in code or "import " in code or "html" in code.lower()):
+                                try:
+                                    os.makedirs(os.path.dirname(filename), exist_ok=True) if os.path.dirname(filename) else None
+                                    with open(filename, 'w', encoding='utf-8') as f:
+                                        f.write(code)
+                                    upload_to_github(filename)
+                                    time.sleep(1)
+                                except Exception as e:
+                                    print(f"Error saving {filename}: {e}")
+                        
+                        return result
+                    except json.JSONDecodeError:
+                        continue # Try next model if JSON is bad
+                else:
+                    print(f"Model {model} failed. Trying next...")
 
-                modifications = result.get("modifications", [])
-                
-                # Apply modifications
-                for mod in modifications:
-                    filename = mod.get("filename")
-                    code = mod.get("code")
-                    if filename and code and ("def " in code or "import " in code or "html" in code.lower()):
-                        print(f"[RUFLO_CHAT] Applying changes to {filename}...")
-                        try:
-                            os.makedirs(os.path.dirname(filename), exist_ok=True) if os.path.dirname(filename) else None
-                            with open(filename, 'w', encoding='utf-8') as f:
-                                f.write(code)
-                            print(f"[RUFLO_CHAT] Pushing {filename} to GitHub...")
-                            upload_to_github(filename)
-                            time.sleep(1)
-                        except Exception as e:
-                            print(f"[RUFLO_CHAT] Error saving {filename}: {e}")
-
-                return result
-            else:
-                return {"reply": f"API Error {response.status_code}: {response.text[:100]}", "modifications": []}
+            return {"reply": "Error: All free AI models failed to respond. Please check your internet or recharge credits.", "modifications": []}
+        except Exception as e:
+            return {"reply": f"Error contacting RuFlo API: {str(e)}", "modifications": []}
 
         except Exception as e:
             return {"reply": f"Error contacting RuFlo API: {str(e)}", "modifications": []}
