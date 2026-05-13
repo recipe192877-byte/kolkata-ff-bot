@@ -126,14 +126,14 @@ def api_health():
                 stats = json.load(f)
                 oos_accuracy = stats.get('oos_accuracy_pct')
         except Exception:
-            pass
+            pass # Ignore if stats file is corrupted or not in expected format
     
     return jsonify({
         "status": "ok",
         "model_loaded": has_model,
         "data_available": has_data,
         "oos_accuracy_pct": oos_accuracy,
-        "brain_capacity": predict_ml.brain.get_brain_capacity(),
+        "brain_capacity": predict_ml.brain.get_brain_capacity() if hasattr(predict_ml, 'brain') and hasattr(predict_ml.brain, 'get_brain_capacity') else "N/A",
         "healer": "RuFlo Autonomous Code Upgrader is ACTIVE",
         "uptime": int(time.time()),
         "cache_size": len(_cache)
@@ -160,14 +160,16 @@ def api_heatmap():
             return jsonify(cached)
 
         result = predict_ml.get_quick_prediction()
-        if result['status'] != 'success':
+        if result.get('status') != 'success':
             return jsonify(result), 500
 
         # Build heatmap from predictions — fill all 10 digits
         preds = result['data']['predictions']
         heatmap = {str(d): 0.0 for d in range(10)}  # Initialize all digits to 0
         for p in preds:
-            heatmap[str(p['number'])] = p['probability']
+            # Ensure number is an int and within 0-9 range
+            if isinstance(p.get('number'), int) and 0 <= p['number'] <= 9:
+                heatmap[str(p['number'])] = p.get('probability', 0.0)
 
         resp = {"status": "success", "heatmap": heatmap}
         _set_cache('heatmap', resp)
@@ -211,7 +213,7 @@ def api_chat():
         return jsonify({
             "status": "success",
             "reply": result.get("reply", "Done."),
-            "files_modified": [mod.get("filename") for mod in result.get("modifications", [])]
+            "files_modified": [mod.get("filename") for mod in result.get("modifications", []) if mod.get("filename")]
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -269,7 +271,7 @@ def api_evolution():
             with open('daily_report.json', 'r') as f:
                 return jsonify({"status": "success", "data": json.load(f)})
         else:
-            return jsonify({"status": "pending", "message": "No daily evolution report generated yet. It will run automatically at midnight."}), 404
+            return jsonify({"status": "pending", "message": "No daily evolution report generated yet. It will run automatically at midnight."})
     except Exception as e:
         return jsonify({"status": "error", "message": f"Evolution report error: {str(e)}"}), 500
 
