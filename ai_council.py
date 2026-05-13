@@ -65,7 +65,7 @@ class AICouncil:
     """Multi-AI Swarm Intelligence for consensus-based predictions."""
 
     def __init__(self):
-        self.api_key = os.environ.get('OPENROUTER_API_KEY', '')
+        self.api_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
         self.last_meeting = None
         self.meeting_log = []
 

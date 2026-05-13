@@ -14,7 +14,7 @@ class RuFloHealer:
     overwrites the local files, and pushes changes to GitHub.
     """
     def __init__(self):
-        self.api_key = os.environ.get('OPENROUTER_API_KEY', '')
+        self.api_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
         
     def scan_and_upgrade(self):
         if not self.api_key:
