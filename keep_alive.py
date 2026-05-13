@@ -69,6 +69,7 @@ def api_predict():
 
         # FIX: Auto-fetch in background thread (non-blocking) to avoid timeout
         current_time = time.time()
+        # Trigger scrape if data is older than 5 minutes
         if (current_time - last_scrape_time) > 300:
             Thread(target=_background_scrape, daemon=True).start()
             
@@ -86,7 +87,7 @@ def api_retrain():
     if retrain_key:
         provided_key = request.args.get('key', '')
         if provided_key != retrain_key:
-            return jsonify({"status": "error", "message": "Unauthorized. Provide ?key=YOUR_RETRAIN_KEY"})
+            return jsonify({"status": "error", "message": "Unauthorized. Provide ?key=YOUR_RETRAIN_KEY"}), 401
     
     try:
         success = predict_ml.train_and_save_model()
@@ -94,10 +95,9 @@ def api_retrain():
         if success:
             return jsonify({"status": "success", "message": "Model retrained successfully on latest data."})
         else:
-            return jsonify({"status": "error", "message": "Not enough data to retrain."})
+            return jsonify({"status": "error", "message": "Not enough data to retrain."}), 400
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Retrain error: {str(e)}"})
-
+        return jsonify({"status": "error", "message": f"Retrain error: {str(e)}"}), 500
 
 
 @app.route('/api/stats')
@@ -107,9 +107,9 @@ def api_stats():
             with open(predict_ml.STATS_FILE, 'r') as f:
                 stats = json.load(f)
             return jsonify({"status": "success", "data": stats})
-        return jsonify({"status": "error", "message": "No stats available. Train the model first."})
+        return jsonify({"status": "error", "message": "No stats available. Train the model first."}), 404
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Stats error: {str(e)}"})
+        return jsonify({"status": "error", "message": f"Stats error: {str(e)}"}), 500
 
 
 @app.route('/api/health')
@@ -161,7 +161,7 @@ def api_heatmap():
 
         result = predict_ml.get_quick_prediction()
         if result['status'] != 'success':
-            return jsonify(result)
+            return jsonify(result), 500
 
         # Build heatmap from predictions — fill all 10 digits
         preds = result['data']['predictions']
@@ -173,7 +173,7 @@ def api_heatmap():
         _set_cache('heatmap', resp)
         return jsonify(resp)
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Heatmap error: {str(e)}"})
+        return jsonify({"status": "error", "message": f"Heatmap error: {str(e)}"}), 500
 
 
 @app.route('/api/heal')
@@ -184,7 +184,7 @@ def api_heal():
         Thread(target=ruflo_upgrader.scan_and_upgrade, daemon=True).start()
         return jsonify({"status": "success", "message": "RuFlo Autonomous Code Upgrade scan has been manually triggered in the background."})
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Heal trigger error: {str(e)}"})
+        return jsonify({"status": "error", "message": f"Heal trigger error: {str(e)}"}), 500
 
 
 @app.route('/api/heal/status')
@@ -193,7 +193,7 @@ def api_heal_status():
     try:
         return jsonify({"status": "success", "data": "RuFlo Autonomous Upgrader is Online and Active."})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/chat', methods=['POST'])
 def api_chat():
@@ -201,7 +201,7 @@ def api_chat():
     try:
         data = request.json
         if not data or 'message' not in data:
-            return jsonify({"status": "error", "message": "No message provided."})
+            return jsonify({"status": "error", "message": "No message provided."}), 400
             
         user_message = data['message']
         # This might take a while if files are modified, so we do it synchronously for now 
@@ -214,7 +214,7 @@ def api_chat():
             "files_modified": [mod.get("filename") for mod in result.get("modifications", [])]
         })
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)})
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/api/council')
@@ -230,7 +230,7 @@ def api_council():
             _set_cache('predict', prediction_data)
 
         if prediction_data.get('status') != 'success':
-            return jsonify({"status": "error", "message": "ML prediction failed. Cannot hold council meeting."})
+            return jsonify({"status": "error", "message": "ML prediction failed. Cannot hold council meeting."}), 500
 
         # Check cache for council (reuse if recent)
         cached_council = _get_cached('council')
@@ -244,7 +244,7 @@ def api_council():
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Council error: {str(e)}"})
+        return jsonify({"status": "error", "message": f"Council error: {str(e)}"}), 500
 
 
 @app.route('/api/council/last')
@@ -253,13 +253,14 @@ def api_council_last():
     last = council.get_last_meeting()
     if last:
         return jsonify(last)
-    return jsonify({"status": "error", "message": "No council meeting held yet. Call /api/council first."})
+    return jsonify({"status": "error", "message": "No council meeting held yet. Call /api/council first."}), 404
 
 
 @app.route('/api/council/log')
 def api_council_log():
     """Get all council meeting history."""
     return jsonify({"status": "success", "meetings": council.get_meeting_log()})
+
 @app.route('/api/evolution')
 def api_evolution():
     """Get the daily AI Evolution report (yesterday's stats + AI config updates)."""
@@ -268,9 +269,9 @@ def api_evolution():
             with open('daily_report.json', 'r') as f:
                 return jsonify({"status": "success", "data": json.load(f)})
         else:
-            return jsonify({"status": "pending", "message": "No daily evolution report generated yet. It will run automatically at midnight."})
+            return jsonify({"status": "pending", "message": "No daily evolution report generated yet. It will run automatically at midnight."}), 404
     except Exception as e:
-        return jsonify({"status": "error", "message": f"Evolution report error: {str(e)}"})
+        return jsonify({"status": "error", "message": f"Evolution report error: {str(e)}"}), 500
 
 
 def run():
