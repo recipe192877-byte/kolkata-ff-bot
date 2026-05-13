@@ -17,7 +17,7 @@ warnings.filterwarnings('ignore')
 brain = KolkataVectorMemory(context_size=5, db_path='kolkata_brain.json')
 
 MODEL_FILE = 'xgb_model.joblib'
-FREQ_FILE = 'freq_model.joblib' # This file is no longer used, freq_model is stored in MODEL_FILE
+# FREQ_FILE = 'freq_model.joblib' # This file is no longer used, freq_model is stored in MODEL_FILE
 DATA_FILE = 'kolkata_ff_history_advanced.csv'
 STATS_FILE = 'backtest_stats.json'
 CONFIG_FILE = 'ai_config.json'
@@ -392,18 +392,16 @@ def generate_oos_stats(features):
         print("Error: Train or test set is empty for OOS validation.")
         return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0}
 
-    X_train = train_df[X_cols]
-    y_train = train_df['Target_Single']
-    X_test = test_df[X_cols]
-    y_test = test_df['Target_Single']
+    # Drop rows with NaN values in X_cols for training/testing
+    X_train = train_df[X_cols].dropna()
+    y_train = train_df['Target_Single'].loc[X_train.index] # Align y_train to X_train indices
     
-    # Ensure all possible target classes are present in y_train for consistent model behavior
-    for model_name, model in create_ensemble_models().items():
-        if hasattr(model, 'classes_'):
-            # This is primarily for models like LGBM and XGBoost which fit with specific classes.
-            # If a model was trained on [1,2,3] and then infers on [0..9], it might fail.
-            # Here we just make sure y_train has enough diversity.
-            pass
+    X_test = test_df[X_cols].dropna()
+    y_test = test_df['Target_Single'].loc[X_test.index] # Align y_test to X_test indices
+
+    if X_train.empty or y_train.empty or X_test.empty or y_test.empty:
+        print("Error: After dropping NaN, train or test set is empty for OOS validation.")
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0}
 
     # Train individual models (no stacking during validation — avoids data leakage)
     models_oos = create_ensemble_models()
@@ -425,9 +423,12 @@ def generate_oos_stats(features):
             all_probs.append(full_probs)
         except Exception as e:
             print(f"Warning: {name} failed predict_proba on OOS: {e}. Skipping this model for OOS accuracy.")
-            # If a model fails, we cannot use its probabilities, treat it as a uniform distribution or skip
-            all_probs.append(np.full((len(X_test), 10), 0.1)) # Fallback to uniform distribution
-
+            # If a model fails, we cannot use its probabilities, treat it as a uniform distribution
+            # or skip, ensure we still have an array otherwise np.mean will fail if all_probs is empty
+            fallback_probs = np.full((len(X_test), 10), 0.1) # Fallback to uniform distribution
+            fallback_probs /= fallback_probs.sum(axis=1)[:, np.newaxis] # Normalize
+            all_probs.append(fallback_probs) # Append the fallback probabilities
+            
     if not all_probs: # If all models failed to predict probabilities
         print("Error: No models successfully predicted probabilities for OOS.")
         return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0}
@@ -436,25 +437,27 @@ def generate_oos_stats(features):
     ensemble_probs = np.mean(all_probs, axis=0)
     
     is_match_list = []
-    for i, true_val in enumerate(y_test.values): # Use .values for consistent indexing
+    # Loop over original y_test (which is a Series) to compare with predictions for corresponding rows
+    for i, true_val in enumerate(y_test.values): 
         sorted_indices = ensemble_probs[i].argsort()[::-1][:3]
         is_match_list.append(int(true_val) in sorted_indices)
     
     matches = np.array(is_match_list)
-    test_df_copy = test_df.copy()
-    test_df_copy['Matched'] = matches
+    # The `test_df_copy` needs to be aligned with `X_test` and `y_test` after dropping NA values
+    test_df_aligned = test_df.loc[X_test.index].copy()
+    test_df_aligned['Matched'] = matches
     
-    # Getting today and week stats based on test_df, specifically the last day in test_df
-    last_date_in_test_df = test_df_copy['Date'].iloc[-1]
+    # Getting today and week stats based on test_df_aligned, specifically the last day in test_df_aligned
+    last_date_in_test_df = test_df_aligned['Date'].iloc[-1]
     
-    today_mask = test_df_copy['Date'] == last_date_in_test_df
-    today_matches_count = int(test_df_copy[today_mask]['Matched'].sum())
+    today_mask = test_df_aligned['Date'] == last_date_in_test_df
+    today_matches_count = int(test_df_aligned[today_mask]['Matched'].sum())
     today_total = int(today_mask.sum())
     
-    unique_dates_in_test = test_df_copy['Date_Obj'].dt.date.unique()
+    unique_dates_in_test = test_df_aligned['Date_Obj'].dt.date.unique()
     last_7_dates = unique_dates_in_test[-7:] if len(unique_dates_in_test) >= 7 else unique_dates_in_test
-    week_mask = test_df_copy['Date_Obj'].dt.date.isin(last_7_dates)
-    week_matches_count = int(test_df_copy[week_mask]['Matched'].sum())
+    week_mask = test_df_aligned['Date_Obj'].dt.date.isin(last_7_dates)
+    week_matches_count = int(test_df_aligned[week_mask]['Matched'].sum())
     week_total = int(week_mask.sum())
     
     prev_correct = bool(matches[-1]) if len(matches) > 0 else False
@@ -498,18 +501,23 @@ def train_and_save_model():
     features, original_df = load_and_preprocess_data()
     if features is None or len(features) < 100: # Increased minimum data for meaningful training
         print("Not enough data to train advanced ML model.")
+        # If not enough data, save default stats file
+        stats = {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0}
+        with open(STATS_FILE, 'w') as f:
+            json.dump(stats, f, indent=4)
         return False
     
     # Generate OOS stats first
     print("Generating pure OOS Validation Stats...")
-    generate_oos_stats(features)
+    backtest_stats = generate_oos_stats(features)
     
     X_cols = get_feature_columns()
-    X = features[X_cols]
-    y = features['Target_Single']
-    
-    # Reindex y to ensure it aligns with X after feature engineering
-    y = y.loc[X.index] 
+    X = features[X_cols].dropna() # Drop any NaN introduced by feature engineering
+    y = features['Target_Single'].loc[X.index] # Align y to X's index after dropping NA
+
+    if X.empty or y.empty:
+        print("Error: No valid data after dropping NaNs for full model training.")
+        return False
 
     # Train all 4 models on full data
     print(f"Training 4-Model Ensemble on {len(X)} records...")
@@ -523,8 +531,9 @@ def train_and_save_model():
         trained_models[name] = model
         print(f"  [OK] {name.upper()} trained")
     
-    # Build frequency model
-    freq_model = build_frequency_model(original_df) # Use original_df for frequency to capture true distributions
+    # Build frequency model (use original_df as it contains the true 'Single' values for frequency calculation)
+    # Ensure original_df is aligned with features_df after min_offset and any previous NA removals
+    freq_model = build_frequency_model(original_df.loc[X.index]) 
     
     # Save everything
     save_package = {
@@ -554,15 +563,6 @@ def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=No
     memory_weight = config.get("memory_weight", DEFAULT_AI_CONFIG["memory_weight"])
     freq_weight = config.get("freq_weight", DEFAULT_AI_CONFIG["freq_weight"])
     
-    # Normalize weights just in case
-    total = ml_weight + memory_weight + freq_weight
-    if total > 0:
-        ml_weight /= total
-        memory_weight /= total
-        freq_weight /= total
-    else: # Fallback if all weights are zero or negative
-        ml_weight, memory_weight, freq_weight = DEFAULT_AI_CONFIG["ml_weight"], DEFAULT_AI_CONFIG["memory_weight"], DEFAULT_AI_CONFIG["freq_weight"]
-    
     # ML prediction (ensemble average)
     ml_dist = ml_probs.copy()
     
@@ -577,19 +577,4 @@ def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=No
         freq_dist[d] = (overall.get(d, 0.01) * 0.3 + bazi_freq.get(d, 0.01) * 0.4 + day_freq.get(d, 0.01) * 0.3)
     
     # Normalize frequency distribution
-    freq_dist = freq_dist / (freq_dist.sum() + 1e-9) # Add epsilon to avoid division by zero
-    
-    # Vector Memory prediction (AI Brain)
-    memory_dist = np.zeros(10)
-    # Check if brain has enough context and capacity
-    if recent_singles is not None and brain.get_brain_capacity() >= brain.context_size:
-        memory_boost_raw = brain.get_prediction_boost(recent_singles, bazi)
-        if memory_boost_raw is not None and sum(memory_boost_raw) > 0:
-            memory_dist = np.array(memory_boost_raw)
-            memory_dist = memory_dist / (memory_dist.sum() + 1e-9)
-        else:
-            memory_weight = 0.0 # If brain signals no boost or all zeros, reduce its weight
-    else:
-        memory_weight = 0.0 # If not enough recent singles or brain capacity is low, disable memory
-        
-    # Re-normalize if memory
+    freq_dist = freq_dist / (freq_dist.
