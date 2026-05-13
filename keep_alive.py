@@ -6,6 +6,7 @@ import json
 import scraper
 import predict_ml_v2 as predict_ml
 from auto_healer import healer
+from ai_council import council
 
 app = Flask(__name__)
 last_scrape_time = 0
@@ -180,6 +181,51 @@ def api_heal_status():
         return jsonify({"status": "success", "data": healer.get_status()})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+
+
+@app.route('/api/council')
+def api_council():
+    """Hold an AI Council meeting — multiple AI models discuss and give consensus prediction."""
+    try:
+        # First get the ML prediction data
+        cached_pred = _get_cached('predict')
+        if cached_pred:
+            prediction_data = cached_pred
+        else:
+            prediction_data = predict_ml.get_quick_prediction()
+            _set_cache('predict', prediction_data)
+
+        if prediction_data.get('status') != 'success':
+            return jsonify({"status": "error", "message": "ML prediction failed. Cannot hold council meeting."})
+
+        # Check cache for council (reuse if recent)
+        cached_council = _get_cached('council')
+        if cached_council:
+            return jsonify(cached_council)
+
+        # Hold the meeting
+        result = council.hold_meeting(prediction_data)
+        if result.get('status') == 'success':
+            _set_cache('council', result)
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Council error: {str(e)}"})
+
+
+@app.route('/api/council/last')
+def api_council_last():
+    """Get the last council meeting result."""
+    last = council.get_last_meeting()
+    if last:
+        return jsonify(last)
+    return jsonify({"status": "error", "message": "No council meeting held yet. Call /api/council first."})
+
+
+@app.route('/api/council/log')
+def api_council_log():
+    """Get all council meeting history."""
+    return jsonify({"status": "success", "meetings": council.get_meeting_log()})
 
 
 def run():

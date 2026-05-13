@@ -698,11 +698,34 @@
                 </div>
             </div>
 
-            <!-- Actions: Retrain -->
+            <!-- Actions: Retrain + AI Council -->
             <div style="margin-top: 1rem; text-align: center; display: flex; justify-content: center; gap: 10px;">
                 <button id="retrainBtn" onclick="triggerRetrain()" style="background: rgba(139, 92, 246, 0.2); color: var(--secondary); border: 1px solid rgba(139, 92, 246, 0.4); padding: 8px 15px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.3s; letter-spacing: 1px;">
-                    🔄 RETRAIN
+                    RETRAIN
                 </button>
+                <button id="councilBtn" onclick="triggerCouncil()" style="background: linear-gradient(135deg, rgba(16,185,129,0.2), rgba(59,130,246,0.2)); color: #10b981; border: 1px solid rgba(16,185,129,0.4); padding: 8px 15px; border-radius: 12px; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: all 0.3s; letter-spacing: 1px;">
+                    AI COUNCIL MEETING
+                </button>
+            </div>
+
+            <!-- AI Council Results -->
+            <div id="councilBox" class="chart-container hidden" style="margin-top: 1rem; border: 1px solid rgba(16,185,129,0.3); background: rgba(16,185,129,0.05);">
+                <div class="stat-label" style="text-align: center; margin-bottom: 0.8rem; color: #10b981;">AI COUNCIL CONSENSUS</div>
+                <div id="councilLoading" style="text-align:center; padding:1rem; display:none;">
+                    <div class="loader" style="display:inline-block; border-top-color:#10b981;"></div>
+                    <div style="color: var(--text-muted); margin-top:8px; font-size:0.85rem;" id="councilStatus">AI experts are in a meeting...</div>
+                </div>
+                <div id="councilResult" style="display:none;">
+                    <div style="display:flex; justify-content:center; gap:1rem; margin-bottom:1rem;">
+                        <div id="councilNum1" style="font-size:2.5rem; font-weight:900; background:rgba(16,185,129,0.15); padding:8px 20px; border-radius:16px; border:1px solid rgba(16,185,129,0.3);"></div>
+                        <div id="councilNum2" style="font-size:2.5rem; font-weight:900; background:rgba(59,130,246,0.15); padding:8px 20px; border-radius:16px; border:1px solid rgba(59,130,246,0.3);"></div>
+                        <div id="councilNum3" style="font-size:2.5rem; font-weight:900; background:rgba(139,92,246,0.15); padding:8px 20px; border-radius:16px; border:1px solid rgba(139,92,246,0.3);"></div>
+                    </div>
+                    <div id="councilConfidence" style="text-align:center; font-size:1.1rem; font-weight:800; margin-bottom:0.5rem;"></div>
+                    <div id="councilReason" style="text-align:center; font-size:0.9rem; color:#cbd5e1; line-height:1.4;"></div>
+                    <div id="councilAgreement" style="text-align:center; font-size:0.75rem; color:var(--text-muted); margin-top:0.5rem;"></div>
+                    <div id="councilOpinions" style="margin-top:1rem;"></div>
+                </div>
             </div>
 
             <!-- Heatmap -->
@@ -1093,6 +1116,94 @@
                 btn.style.borderColor = 'rgba(139, 92, 246, 0.4)';
                 btn.style.color = 'var(--secondary)';
             }, 5000);
+        }
+
+        async function triggerCouncil() {
+            const btn = document.getElementById('councilBtn');
+            const box = document.getElementById('councilBox');
+            const loading = document.getElementById('councilLoading');
+            const result = document.getElementById('councilResult');
+
+            btn.disabled = true;
+            btn.textContent = 'MEETING IN PROGRESS...';
+            btn.style.borderColor = '#10b981';
+            box.classList.remove('hidden');
+            loading.style.display = 'block';
+            result.style.display = 'none';
+
+            // Animate the loading status
+            const statuses = [
+                'StatBot is analyzing statistics...',
+                'PatternAI is scanning patterns...',
+                'RiskGuard is assessing risk...',
+                'Chairman is building consensus...'
+            ];
+            let si = 0;
+            const statusInterval = setInterval(() => {
+                document.getElementById('councilStatus').textContent = statuses[si % statuses.length];
+                si++;
+            }, 3000);
+
+            try {
+                const response = await fetch('/api/council');
+                const data = await response.json();
+                clearInterval(statusInterval);
+
+                if (data.status === 'success' && data.consensus) {
+                    loading.style.display = 'none';
+                    result.style.display = 'block';
+
+                    const nums = data.consensus.numbers || [];
+                    document.getElementById('councilNum1').textContent = nums[0] !== undefined ? nums[0] : '-';
+                    document.getElementById('councilNum2').textContent = nums[1] !== undefined ? nums[1] : '-';
+                    document.getElementById('councilNum3').textContent = nums[2] !== undefined ? nums[2] : '-';
+
+                    const conf = data.consensus.confidence || 'LOW';
+                    const confColor = conf === 'HIGH' ? '#10b981' : (conf === 'MEDIUM' ? '#f59e0b' : '#ef4444');
+                    const risk = data.consensus.risk || 'SKIP';
+                    const riskIcon = risk === 'PLAY' ? 'KHELNA HAI' : (risk === 'WAIT' ? 'WAIT KARO' : 'SKIP KARO');
+
+                    document.getElementById('councilConfidence').innerHTML =
+                        `<span style="color:${confColor}">${conf} CONFIDENCE</span> | <span style="color:${confColor}">${riskIcon}</span>`;
+                    document.getElementById('councilReason').textContent = data.consensus.reason_hindi || '';
+                    document.getElementById('councilAgreement').textContent =
+                        `${data.consensus.agreement || ''} | Meeting duration: ${data.duration_seconds || 0}s`;
+
+                    // Render individual opinions
+                    const opinionsDiv = document.getElementById('councilOpinions');
+                    opinionsDiv.innerHTML = '';
+                    if (data.opinions) {
+                        data.opinions.forEach(op => {
+                            const opDiv = document.createElement('div');
+                            opDiv.style.cssText = 'background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.05); border-radius:12px; padding:0.8rem; margin-bottom:0.5rem;';
+                            opDiv.innerHTML = `<div style="font-size:0.8rem; font-weight:800; color:#60a5fa; margin-bottom:4px;">${op.name} (${op.role})</div><div style="font-size:0.8rem; color:#94a3b8; line-height:1.4;">${op.analysis.substring(0, 300)}${op.analysis.length > 300 ? '...' : ''}</div>`;
+                            opinionsDiv.appendChild(opDiv);
+                        });
+                    }
+
+                    btn.textContent = 'MEETING COMPLETE';
+                    btn.style.color = '#10b981';
+                } else {
+                    loading.style.display = 'none';
+                    result.style.display = 'block';
+                    document.getElementById('councilConfidence').textContent = data.message || 'Council meeting failed';
+                    document.getElementById('councilReason').textContent = 'Set OPENROUTER_API_KEY to enable AI Council.';
+                    btn.textContent = 'COUNCIL ERROR';
+                    btn.style.color = '#ef4444';
+                }
+            } catch (err) {
+                clearInterval(statusInterval);
+                loading.style.display = 'none';
+                btn.textContent = 'NETWORK ERROR';
+                btn.style.color = '#ef4444';
+            }
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = 'AI COUNCIL MEETING';
+                btn.style.borderColor = 'rgba(16,185,129,0.4)';
+                btn.style.color = '#10b981';
+            }, 10000);
         }
 
     </script>
