@@ -16,7 +16,7 @@ def safe_retrain():
 
 def start_bot():
     print("==================================================")
-    print(" KOLKATA FF BACKGROUND WORKER v3.0 (AI POWERED)   ")
+    print(" KOLKATA FF BACKGROUND WORKER v3.1 (AI POWERED)   ")
     print(" 4-Model Ensemble | Vector Memory | Auto-Healer   ")
     print("==================================================")
     print(f" Brain Capacity: {predict_ml.brain.get_brain_capacity()} patterns")
@@ -26,7 +26,10 @@ def start_bot():
     last_record_count = 0
     consecutive_failures = 0
     MAX_CONSECUTIVE_FAILURES = 10
-    last_evolution_date = None
+    
+    # Initialize last_evolution_date to prevent immediate daily evolution on first run
+    # This ensures the check `current_date != last_evolution_date` works as intended.
+    last_evolution_date = datetime.datetime.now().date() 
     
     while True:
         try:
@@ -40,6 +43,7 @@ def start_bot():
                 df = pd.read_csv(predict_ml.DATA_FILE)
                 current_count = len(df)
             except Exception:
+                # If file doesn't exist or is corrupted, treat as 0 records
                 current_count = 0
                 
             if current_count != last_record_count:
@@ -59,6 +63,7 @@ def start_bot():
                 print(f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] Running Daily AI Evolution...")
                 try:
                     yesterday_stats = predict_ml.get_yesterday_stats()
+                    # Ensure yesterday_stats is not None and has relevant data before proceeding
                     if yesterday_stats and yesterday_stats.get('total_bazis', 0) > 0:
                         from ai_council import council
                         import json
@@ -78,12 +83,21 @@ def start_bot():
                         else:
                             print(f"[EVOLUTION] Meeting failed or skipped: {evo_result.get('message', 'Unknown error')}")
                             
-                        with open('daily_report.json', 'w') as f:
+                        # Ensure reports directory exists
+                        reports_dir = 'reports'
+                        os.makedirs(reports_dir, exist_ok=True)
+                        report_filename = os.path.join(reports_dir, f"daily_report_{current_date.strftime('%Y%m%d')}.json")
+                        with open(report_filename, 'w') as f:
                             json.dump(report, f, indent=4)
+                            print(f"[EVOLUTION] Daily report saved to {report_filename}")
                             
                         last_evolution_date = current_date
+                    else:
+                        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] No significant yesterday stats for AI Evolution. Skipping.")
+                        last_evolution_date = current_date # Still update to avoid re-running today if data is consistently empty
                 except Exception as evo_err:
                     print(f"Error during daily evolution: {evo_err}")
+                    traceback.print_exc() # Print full traceback for evolution errors
             
             # Reset failure counter on success
             consecutive_failures = 0
@@ -102,10 +116,11 @@ def start_bot():
             
             if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                 print(f"[CRITICAL] {MAX_CONSECUTIVE_FAILURES} consecutive failures. Resetting state and waiting 10 minutes...")
-                consecutive_failures = 0
+                consecutive_failures = 0 # Reset to allow future attempts
                 time.sleep(600)
             else:
-                # Exponential backoff: 2min, 4min, 8min, etc.
+                # Exponential backoff: 2min, 4min, 8min, etc., capped at 10 minutes (600s)
+                # First failure: 2min, Second: 4min, Third: 8min, Fourth: 16min (capped at 10 min), etc.
                 wait = min(120 * (2 ** (consecutive_failures - 1)), 600)
                 print(f"Retrying in {wait}s...")
                 time.sleep(wait)
