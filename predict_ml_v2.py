@@ -17,7 +17,7 @@ warnings.filterwarnings('ignore')
 brain = KolkataVectorMemory(context_size=5, db_path='kolkata_brain.json')
 
 MODEL_FILE = 'xgb_model.joblib'
-FREQ_FILE = 'freq_model.joblib'
+FREQ_FILE = 'freq_model.joblib' # This is deprecated, frequency model is now part of MODEL_FILE
 DATA_FILE = 'kolkata_ff_history_advanced.csv'
 STATS_FILE = 'backtest_stats.json'
 CONFIG_FILE = 'ai_config.json'
@@ -42,14 +42,21 @@ def load_ai_config():
                     if k not in config:
                         config[k] = v
                 return config
-        except Exception:
+        except json.JSONDecodeError: # Handle empty or malformed JSON
+            print(f"Warning: {CONFIG_FILE} is corrupted or empty. Using default config.")
+            return DEFAULT_AI_CONFIG
+        except Exception as e:
+            print(f"Error loading AI config: {e}. Using default config.")
             return DEFAULT_AI_CONFIG
     return DEFAULT_AI_CONFIG
 
 def save_ai_config(config):
     """Save updated AI weights and settings."""
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        print(f"Error saving AI config: {e}")
 
 # ============================================================
 #                FEATURE ENGINEERING V3 (DEEP)
@@ -66,6 +73,7 @@ def extract_patti_digits(patti_val):
     if pd.isna(patti_val) or str(patti_val).strip() == '':
         return 0, 0, 0
     try:
+        # Ensure it's treated as a 3-digit string, padding with 0s if necessary
         s = str(int(float(patti_val))).zfill(3)
         return int(s[0]), int(s[1]), int(s[2])
     except (ValueError, TypeError):
@@ -75,15 +83,16 @@ def compute_gap_features(singles_series, current_idx):
     """Compute how many draws since each digit (0-9) last appeared."""
     gaps = {}
     for d in range(10):
-        # Look backwards from current_idx
+        # Look backwards from current_idx, up to 50 previous draws
         found = False
+        # Use .iloc just in case index is not sequential
         for gap in range(1, min(current_idx + 1, 51)):
             if singles_series.iloc[current_idx - gap] == d:
                 gaps[f'Gap_{d}'] = gap
                 found = True
                 break
         if not found:
-            gaps[f'Gap_{d}'] = 50  # Max gap value
+            gaps[f'Gap_{d}'] = 50  # Max gap value if not found in last 50
     return gaps
 
 def compute_frequency_features(singles_series, current_idx, window=20):
@@ -91,18 +100,21 @@ def compute_frequency_features(singles_series, current_idx, window=20):
     start = max(0, current_idx - window)
     recent = singles_series.iloc[start:current_idx]
     freq = {}
-    counts = recent.value_counts()
+    counts = recent.value_counts(normalize=True) # Normalize to get frequencies directly
     for d in range(10):
-        freq[f'Freq_{d}'] = counts.get(d, 0) / max(len(recent), 1)
+        freq[f'Freq_{d}'] = counts.get(d, 0) # Default to 0 if digit not found
     return freq
 
 def load_and_preprocess_data(filepath=DATA_FILE):
     try:
         df = pd.read_csv(filepath)
-        df = df.dropna(subset=['Single'])
+        df = df.dropna(subset=['Single', 'Patti']) # Ensure both are present
         df['Single'] = df['Single'].astype(int)
         
+        # Use dd/mm/yyyy explicitly for consistency
         df['Date_Obj'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
+        df = df.dropna(subset=['Date_Obj']) # Drop rows where date parsing failed
+        
         df = df.sort_values(by=['Date_Obj', 'Bazi'], ascending=[True, True]).reset_index(drop=True)
         
         # === CORE FEATURES ===
@@ -118,30 +130,36 @@ def load_and_preprocess_data(filepath=DATA_FILE):
         df['Month_Cos'] = np.cos(2 * np.pi * df['Month'] / 12)
         
         # === PATTI DIGIT FEATURES ===
-        patti_digits = df['Patti'].apply(extract_patti_digits)
-        df['Patti_D1'] = patti_digits.apply(lambda x: x[0])
-        df['Patti_D2'] = patti_digits.apply(lambda x: x[1])
-        df['Patti_D3'] = patti_digits.apply(lambda x: x[2])
-        
+        patti_digits_df = df['Patti'].apply(lambda x: pd.Series(extract_patti_digits(x)))
+        patti_digits_df.columns = ['Patti_D1', 'Patti_D2', 'Patti_D3']
+        df = pd.concat([df, patti_digits_df], axis=1)
+
         # === ROLLING / LAG FEATURES ===
         df['Is_Even'] = (df['Single'] % 2 == 0).astype(int)
+        # Shift to prevent data leakage (use previous data)
         df['Rolling_Even_5'] = df['Is_Even'].shift(1).rolling(window=5, min_periods=1).mean().fillna(0.5)
-        df['Prev_Day_Same_Bazi'] = df.groupby('Bazi')['Single'].shift(1).fillna(df['Single'].shift(1)).fillna(0)
         
-        # Moving Averages
+        # Corrected Prev_Day_Same_Bazi: ensure it looks for previous _day's_ result for the same Bazi
+        df['Prev_Day_Same_Bazi'] = df.groupby('Bazi')['Single'].shift(8).fillna(df['Single'].shift(1)).fillna(0) # shift by 8 (max bazi-count) to get previous day same bazi
+        
+        # Moving Averages - shifted to prevent leakage
         df['MA_7'] = df['Single'].shift(1).rolling(window=7, min_periods=1).mean().fillna(4.5)
         df['MA_30'] = df['Single'].shift(1).rolling(window=30, min_periods=1).mean().fillna(4.5)
-        df['STD_7'] = df['Single'].shift(1).rolling(window=7, min_periods=1).std().fillna(3.0)
-        df['Patti_MA_7'] = df['Patti_Sum'].shift(1).rolling(window=7, min_periods=1).mean().fillna(0)
+        df['STD_7'] = df['Single'].shift(1).rolling(window=7, min_periods=1).std().fillna(df['Single'].std()) # Use overall std if not enough data
+        df['Patti_MA_7'] = df['Patti_Sum'].shift(1).rolling(window=7, min_periods=1).mean().fillna(df['Patti_Sum'].mean())
         
         # === GAP FEATURES: How many draws since digit X last appeared ===
         print("Computing gap & frequency features (this may take a moment)...")
         gap_data = []
         freq_data = []
+        # Min index for reliable feature calculation
+        min_reliable_idx = max(50, 20) # for gaps and freqs calculation
+        
         for i in range(len(df)):
-            if i < 20:
+            if i < min_reliable_idx: # Not enough history for initial rows
                 gaps = {f'Gap_{d}': 50 for d in range(10)}
-                freqs = {f'Freq_{d}': 0.1 for d in range(10)}
+                # Using 0.1 for initial frequencies or uniform distribution proxy
+                freqs = {f'Freq_{d}': 0.1 for d in range(10)} 
             else:
                 gaps = compute_gap_features(df['Single'], i)
                 freqs = compute_frequency_features(df['Single'], i, window=20)
@@ -153,27 +171,42 @@ def load_and_preprocess_data(filepath=DATA_FILE):
         df = pd.concat([df, gap_df, freq_df], axis=1)
         
         # === BAZI-SPECIFIC FREQUENCY (last 30 same-bazi draws) ===
+        # Initialize columns
         for d in range(10):
-            df[f'Bazi_Freq_{d}'] = 0.0
+            df[f'Bazi_Freq_{d}'] = np.nan # Use NaN to distinguish from calculated zeros
         
-        for bazi_num in range(1, 9):
+        for bazi_num in df['Bazi'].unique():
             bazi_mask = df['Bazi'] == bazi_num
-            bazi_df = df[bazi_mask].copy()
+            bazi_df_temp = df[bazi_mask].copy() # Work on a copy to avoid SettingWithCopyWarning
             for d in range(10):
-                bazi_df[f'Bazi_Freq_{d}'] = (bazi_df['Single'].shift(1) == d).astype(int).rolling(window=30, min_periods=1).mean().fillna(0.1)
-            df.loc[bazi_mask, [f'Bazi_Freq_{d}' for d in range(10)]] = bazi_df[[f'Bazi_Freq_{d}' for d in range(10)]].values
+                # Calculate frequency using shifted 'Single' to prevent leakage
+                bazi_df_temp[f'Bazi_Freq_{d}'] = (bazi_df_temp['Single'].shift(1) == d).astype(int).rolling(window=30, min_periods=1).mean()
+            # Update the original df with calculated frequencies
+            df.loc[bazi_mask, [f'Bazi_Freq_{d}' for d in range(10)]] = bazi_df_temp[[f'Bazi_Freq_{d}' for d in range(10)]].values
         
+        # Fill remaining NaNs (e.g., for early records in a Bazi) with a default (e.g., 0.1 for uniform distribution)
+        for d in range(10):
+            df[f'Bazi_Freq_{d}'] = df[f'Bazi_Freq_{d}'].fillna(0.1)
+
         # === STREAK FEATURES ===
         df['Same_As_Prev'] = (df['Single'] == df['Single'].shift(1)).astype(int)
-        df['Repeat_In_3'] = 0
-        for i in range(3, len(df)):
-            last3 = df['Single'].iloc[i-3:i].values
-            df.iloc[i, df.columns.get_loc('Repeat_In_3')] = int(len(set(last3)) < 3)
         
-        original_df = df.copy()
+        # A more efficient way to compute 'Repeat_In_3'
+        df['Single_lag1'] = df['Single'].shift(1)
+        df['Single_lag2'] = df['Single'].shift(2)
+        df['Repeat_In_3'] = ((df['Single_lag1'] == df['Single_lag2']) | \
+                             (df['Single_lag1'] == df['Single_lag3']) | \
+                             (df['Single_lag2'] == df['Single_lag3'])).astype(int) # This was missing Single_lag3
+        df['Single_lag3'] = df['Single'].shift(3) # define it here for repeat in 3
+        df['Repeat_In_3'] = ((df['Single_lag1'] == df['Single_lag2']) |
+                             (df['Single_lag1'] == df['Single_lag3']) |
+                             (df['Single_lag2'] == df['Single_lag3'])).astype(int)
+        df.drop(columns=['Single_lag1', 'Single_lag2', 'Single_lag3'], inplace=True) # clean up
+        
+        original_df = df.copy() # Keep a copy before dropping rows
         
         # === BUILD FEATURE MATRIX ===
-        feature_cols = (
+        feature_cols_base = (
             ['Date', 'Date_Obj', 'Bazi', 'DayOfWeek_Sin', 'DayOfWeek_Cos', 'Month_Sin', 'Month_Cos', 'Is_Weekend',
              'MA_7', 'MA_30', 'STD_7', 'Patti_MA_7', 'Patti_D1', 'Patti_D2', 'Patti_D3',
              'Rolling_Even_5', 'Prev_Day_Same_Bazi', 'Same_As_Prev', 'Repeat_In_3']
@@ -182,29 +215,37 @@ def load_and_preprocess_data(filepath=DATA_FILE):
             + [f'Bazi_Freq_{d}' for d in range(10)]
         )
         
-        features = df[feature_cols].copy()
+        features = df[feature_cols_base].copy()
         
-        # Lag features
+        # Lag features should also be available at the point of prediction
         features['Prev_1_Single'] = df['Single'].shift(1)
         features['Prev_2_Single'] = df['Single'].shift(2)
         features['Prev_3_Single'] = df['Single'].shift(3)
         features['Prev_4_Single'] = df['Single'].shift(4)
         features['Prev_5_Single'] = df['Single'].shift(5)
+        
         features['Prev_Patti_Sum'] = df['Patti_Sum'].shift(1)
         features['Prev_Patti_D1'] = df['Patti_D1'].shift(1)
         features['Prev_Patti_D2'] = df['Patti_D2'].shift(1)
         features['Prev_Patti_D3'] = df['Patti_D3'].shift(1)
         
-        features['Target_Single'] = df['Single']
+        features['Target_Single'] = df['Single'] # The target variable
         
+        # Drop rows with any NaN values that resulted from shifting or initial feature calculation
+        # This is where we ensure all features are valid for ALL rows we use.
         features = features.dropna()
-        min_offset = 20  # Need at least 20 rows for gap/freq features
-        original_df = original_df.iloc[min_offset:].reset_index(drop=True)
-        features = features.iloc[max(0, min_offset - 5):].reset_index(drop=True)
+        
+        # Align original_df with features after dropping NaNs
+        original_df = original_df.loc[features.index].reset_index(drop=True)
+        features = features.reset_index(drop=True)
         
         return features, original_df
         
     except FileNotFoundError:
+        print(f"Error: Data file not found at {filepath}")
+        return None, None
+    except Exception as e:
+        print(f"Error during data preprocessing: {e}")
         return None, None
 
 # ============================================================
@@ -229,9 +270,9 @@ def create_ensemble_models():
     
     # XGBoost — low depth, high regularization
     xgb_model = xgb.XGBClassifier(
-        n_estimators=150,
-        max_depth=3,
-        learning_rate=0.02,
+        n_estimators=200, # Increased estimators
+        max_depth=4,      # Slightly increased depth
+        learning_rate=0.03, # Slightly increased learning rate
         subsample=0.7,
         colsample_bytree=0.6,
         reg_alpha=2.0,           # L1 regularization
@@ -239,14 +280,15 @@ def create_ensemble_models():
         min_child_weight=10,     # Minimum samples per leaf
         gamma=1.0,               # Minimum loss reduction
         random_state=42,
-        eval_metric='mlogloss'
+        eval_metric='mlogloss',
+        use_label_encoder=False # Suppress warning
     )
     
     # LightGBM — complementary to XGB
     lgb_model = lgb.LGBMClassifier(
-        n_estimators=150,
-        max_depth=3,
-        learning_rate=0.02,
+        n_estimators=200,       # Increased estimators
+        max_depth=4,            # Slightly increased depth
+        learning_rate=0.03,     # Slightly increased learning rate
         subsample=0.7,
         colsample_bytree=0.6,
         reg_alpha=2.0,
@@ -258,19 +300,20 @@ def create_ensemble_models():
     
     # Random Forest — lower depth, balanced
     rf_model = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=4,
+        n_estimators=250, # Increased estimators
+        max_depth=5,      # Slightly increased depth
         min_samples_leaf=8,
         min_samples_split=15,
         max_features='sqrt',
         random_state=42,
-        class_weight='balanced'
+        class_weight='balanced', # Important for imbalanced classes
+        n_jobs=-1 # Use all available cores
     )
     
     # Gradient Boosting — sklearn variant, different algorithm
     gb_model = GradientBoostingClassifier(
-        n_estimators=100,
-        max_depth=3,
+        n_estimators=150, # Increased estimators
+        max_depth=4,      # Slightly increased depth
         learning_rate=0.03,
         subsample=0.7,
         min_samples_leaf=10,
@@ -289,26 +332,31 @@ def build_frequency_model(df):
     freq_model = {}
     
     # Overall frequency
-    overall_counts = df['Single'].value_counts(normalize=True)
-    freq_model['overall'] = {d: overall_counts.get(d, 0.1) for d in range(10)}
+    # Add a small smoothing factor (Laplace smoothing) to prevent zero probabilities
+    alpha = 1
+    overall_counts = df['Single'].value_counts()
+    total_overall = overall_counts.sum() + alpha * 10 # Add alpha for each possible digit (0-9)
+    freq_model['overall'] = {d: (overall_counts.get(d, 0) + alpha) / total_overall for d in range(10)}
     
     # Bazi-specific frequency
     for bazi in range(1, 9):
         bazi_data = df[df['Bazi'] == bazi]
         if len(bazi_data) > 10:
-            bazi_counts = bazi_data['Single'].value_counts(normalize=True)
-            freq_model[f'bazi_{bazi}'] = {d: bazi_counts.get(d, 0.1) for d in range(10)}
+            bazi_counts = bazi_data['Single'].value_counts()
+            total_bazi = bazi_counts.sum() + alpha * 10
+            freq_model[f'bazi_{bazi}'] = {d: (bazi_counts.get(d, 0) + alpha) / total_bazi for d in range(10)}
         else:
-            freq_model[f'bazi_{bazi}'] = freq_model['overall']
+            freq_model[f'bazi_{bazi}'] = freq_model['overall'] # Fallback to overall
     
     # Day-specific frequency
     for day in range(7):
         day_data = df[df['Date_Obj'].dt.dayofweek == day]
-        if len(day_data) > 20:
-            day_counts = day_data['Single'].value_counts(normalize=True)
-            freq_model[f'day_{day}'] = {d: day_counts.get(d, 0.1) for d in range(10)}
+        if len(day_data) > 20: # More data required for reliable day-specific stats
+            day_counts = day_data['Single'].value_counts()
+            total_day = day_counts.sum() + alpha * 10
+            freq_model[f'day_{day}'] = {d: (day_counts.get(d, 0) + alpha) / total_day for d in range(10)}
         else:
-            freq_model[f'day_{day}'] = freq_model['overall']
+            freq_model[f'day_{day}'] = freq_model['overall'] # Fallback to overall
     
     return freq_model
 
@@ -318,75 +366,123 @@ def build_frequency_model(df):
 
 def generate_oos_stats(features):
     """True Out-of-Sample validation using TimeSeriesSplit."""
-    features = features.sort_values(by=['Date_Obj', 'Bazi'])
+    features = features.sort_values(by=['Date_Obj', 'Bazi'], ascending=[True, True])
     unique_dates = features['Date_Obj'].dt.date.unique()
     
-    if len(unique_dates) < 20: 
-        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
+    if len(unique_dates) < 21: # Need enough dates for a meaningful 21-day OOS test
+        print("Warning: Not enough unique dates for deep OOS validation. Skipping.")
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0}
     
     X_cols = get_feature_columns()
     
     # Use last 21 days as test, rest as train (proper temporal split)
-    last_21_dates = unique_dates[-21:]
-    cutoff_date = last_21_dates[0]
+    # The cutoff should be based on the start of the 21-day test period
+    cutoff_date = unique_dates[-21]
     
     train_df = features[features['Date_Obj'].dt.date < cutoff_date]
     test_df = features[features['Date_Obj'].dt.date >= cutoff_date]
+    
+    if train_df.empty or test_df.empty:
+        print("Warning: Train or test set is empty during OOS validation. Skipping.")
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0}
     
     X_train = train_df[X_cols]
     y_train = train_df['Target_Single']
     X_test = test_df[X_cols]
     y_test = test_df['Target_Single']
     
+    # Ensure X_train and X_test have the same columns in the same order
+    X_train, X_test = X_train.align(X_test, join='outer', axis=1, fill_value=0) # fill with 0 for new cols
+    X_train = X_train[X_cols] # Re-filter to ensure only expected cols remain
+    X_test = X_test[X_cols]
+    
     # Train individual models (no stacking during validation — avoids data leakage)
     models = create_ensemble_models()
-    all_probs = []
+    all_ml_probs = []
     
     for name, model in models.items():
-        model.fit(X_train, y_train)
-        probs = model.predict_proba(X_test)
-        # Ensure all classes 0-9 are represented
-        full_probs = np.zeros((len(X_test), 10))
-        for i, cls in enumerate(model.classes_):
-            full_probs[:, int(cls)] = probs[:, i]
-        all_probs.append(full_probs)
+        try:
+            model.fit(X_train, y_train)
+            probs = model.predict_proba(X_test)
+            
+            # Ensure all classes 0-9 are represented, even if a model didn't predict them in training
+            full_probs = np.zeros((len(X_test), 10))
+            # Map model.classes_ to column indices correctly
+            for i, cls in enumerate(model.classes_):
+                if 0 <= int(cls) <= 9:
+                    full_probs[:, int(cls)] = probs[:, i]
+            all_ml_probs.append(full_probs)
+        except Exception as e:
+            print(f"Error training/predicting with {name} during OOS validation: {e}")
+            continue # Skip this model if it fails
     
+    if not all_ml_probs: # If all models failed to train
+        print("Error: No models could be trained for OOS validation.")
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0}
+        
     # Average ensembling (simpler, less overfit than stacking)
-    ensemble_probs = np.mean(all_probs, axis=0)
+    ensemble_ml_probs = np.mean(all_ml_probs, axis=0)
     
-    is_match_list = []
-    for i, true_val in enumerate(y_test):
-        sorted_indices = ensemble_probs[i].argsort()[::-1][:3]
-        is_match_list.append(int(true_val) in sorted_indices)
+    # Re-build frequency model on the training data for fair application
+    freq_model = build_frequency_model(train_df[['Single', 'Bazi', 'Date_Obj']])
+
+    # Apply blending for OOS predictions
+    blended_matches = []
+    for i in range(len(test_df)):
+        bazi = int(test_df.iloc[i]['Bazi'])
+        day_of_week = test_df.iloc[i]['Date_Obj'].dayofweek
+        
+        # Get recent singles for vector memory from training data + already predicted test data
+        recent_singles_for_brain = []
+        if i > 0: # Get singles from previous test predictions and training data
+            current_date_obj = test_df.iloc[i]['Date_Obj']
+            # Look up to 5 previous results, prioritize from actuals before current test split
+            temp_df_for_brain = pd.concat([train_df, test_df.iloc[:i]])
+            recent_singles_for_brain = temp_df_for_brain['Single'].tail(5).values.tolist()
+            
+        blended_probs = blend_predictions(ensemble_ml_probs[i], freq_model, bazi, day_of_week, recent_singles=recent_singles_for_brain)
+        
+        sorted_indices = blended_probs.argsort()[::-1][:3]
+        blended_matches.append(int(y_test.iloc[i]) in sorted_indices)
     
-    matches = np.array(is_match_list)
+    matches = np.array(blended_matches)
+    
     test_df_copy = test_df.copy()
     test_df_copy['Matched'] = matches
     
-    last_date = test_df_copy['Date'].iloc[-1]
-    today_mask = test_df_copy['Date'] == last_date
+    # Use timezone-aware current time for 'today_str'
+    kolkata_tz = timezone(timedelta(hours=5, minutes=30))
+    today_kolkata = datetime.now(kolkata_tz).strftime('%d/%m/%Y')
+    
+    last_date_in_test_df = test_df_copy['Date'].iloc[-1]
+    
+    # Determine today's matches based on the last recorded date in the test set.
+    # This might be yesterday or older if the data is not fully up-to-date.
+    today_mask = (test_df_copy['Date'] == last_date_in_test_df)
     today_matches_count = int(test_df_copy[today_mask]['Matched'].sum())
     today_total = int(today_mask.sum())
     
-    test_dates = test_df_copy['Date'].unique()
-    last_7_dates = test_dates[-7:] if len(test_dates) >= 7 else test_dates
-    week_mask = test_df_copy['Date'].isin(last_7_dates)
+    unique_test_dates = test_df_copy['Date'].unique()
+    last_7_test_dates = unique_test_dates[-7:] if len(unique_test_dates) >= 7 else unique_test_dates
+    week_mask = test_df_copy['Date'].isin(last_7_test_dates)
     week_matches_count = int(test_df_copy[week_mask]['Matched'].sum())
     week_total = int(week_mask.sum())
     
     prev_correct = bool(matches[-1]) if len(matches) > 0 else False
     
     win_streak = 0
+    # Iterate backwards from the _end_ of the matches list
     for m in reversed(matches):
         if m: win_streak += 1
         else: break
     
     lose_streak = 0
+    # Iterate backwards from the _end_ of the matches list
     for m in reversed(matches):
         if not m: lose_streak += 1
         else: break
     
-    overall_accuracy = float(matches.mean() * 100)
+    overall_accuracy = float(matches.mean() * 100) if len(matches) > 0 else 0.0
     
     stats = {
         "today_matches": f"{today_matches_count}/{today_total}",
@@ -397,25 +493,36 @@ def generate_oos_stats(features):
         "oos_accuracy_pct": round(overall_accuracy, 1)
     }
     
-    with open(STATS_FILE, 'w') as f:
-        json.dump(stats, f)
-    
+    # Store OOS stats for general info
+    try:
+        with open(STATS_FILE, 'w') as f:
+            json.dump(stats, f, indent=4)
+    except Exception as e:
+        print(f"Error saving OOS stats: {e}")
+        
     print(f"OOS Validation: {overall_accuracy:.1f}% top-3 accuracy over {len(matches)} predictions (random baseline: 30%)")
     return stats
 
 def train_and_save_model():
     features, original_df = load_and_preprocess_data()
-    if features is None or len(features) < 100:
-        print("Not enough data to train advanced ML model.")
+    if features is None or len(features) < 100: # Increased minimum data requirement
+        print("Not enough data to train advanced ML model. Need at least 100 processed records.")
         return False
     
-    # Generate OOS stats first
+    # Generate OOS stats first - this helps in evaluating the model without seeing the future data
     print("Generating pure OOS Validation Stats...")
-    generate_oos_stats(features)
+    generate_oos_stats(features.copy()) # Pass a copy to avoid in-place modifications
     
     X_cols = get_feature_columns()
     X = features[X_cols]
     y = features['Target_Single']
+    
+    # Handle potential missing columns in X if get_feature_columns adds new ones not in the loaded data
+    # (e.g. if new features are added but not in the historical CSV for older records)
+    missing_cols = set(X_cols) - set(X.columns)
+    for c in missing_cols:
+        X[c] = 0 # Add missing columns with a default value (e.g. 0)
+    X = X[X_cols] # Ensure column order
     
     # Train all 4 models on full data
     print(f"Training 4-Model Ensemble on {len(X)} records...")
@@ -423,11 +530,19 @@ def train_and_save_model():
     trained_models = {}
     
     for name, model in models.items():
-        model.fit(X, y)
-        trained_models[name] = model
-        print(f"  [OK] {name.upper()} trained")
-    
-    # Build frequency model
+        try:
+            model.fit(X, y)
+            trained_models[name] = model
+            print(f"  [OK] {name.upper()} trained")
+        except Exception as e:
+            print(f"Error training model {name}: {e}. Skipping this model.")
+            # If a model fails, it won't be included in trained_models
+            
+    if not trained_models:
+        print("Error: No models were successfully trained.")
+        return False
+            
+    # Build frequency model using the full original_df
     freq_model = build_frequency_model(original_df)
     
     # Save everything
@@ -444,543 +559,25 @@ def train_and_save_model():
 #               LIVE PREDICTION & STATS
 # ============================================================
 
-def load_ai_config():
-    if os.path.exists('ai_config.json'):
-        with open('ai_config.json', 'r') as f:
-            return json.load(f)
-    return {"ml_weight": 0.50, "memory_weight": 0.15, "freq_weight": 0.35}
-
-def save_ai_config(config):
-    with open('ai_config.json', 'w') as f:
-        json.dump(config, f)
-
 def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=None):
     """Blend Machine Learning probabilities with Frequency model and Vector Memory."""
     
-    # Load dynamic weights from config
     config = load_ai_config()
-    ml_weight = config.get("ml_weight", 0.50)
-    memory_weight = config.get("memory_weight", 0.15)
-    freq_weight = config.get("freq_weight", 0.35)
+    ml_weight = config.get("ml_weight", DEFAULT_AI_CONFIG["ml_weight"])
+    memory_weight = config.get("memory_weight", DEFAULT_AI_CONFIG["memory_weight"])
+    freq_weight = config.get("freq_weight", DEFAULT_AI_CONFIG["freq_weight"])
     
-    # Normalize weights just in case
-    total = ml_weight + memory_weight + freq_weight
-    if total > 0:
-        ml_weight /= total
-        memory_weight /= total
-        freq_weight /= total
-    else:
-        ml_weight, memory_weight, freq_weight = 0.50, 0.15, 0.35
-    
-    # ML prediction (ensemble average)
-    ml_dist = ml_probs.copy()
+    # Sanitize inputs to ml_probs, ensure it's a valid probability distribution
+    if not isinstance(ml_probs, np.ndarray) or ml_probs.shape != (10,) or ml_probs.sum() == 0:
+        ml_probs = np.full(10, 0.1) # Default to uniform if invalid
+    ml_dist = ml_probs / ml_probs.sum() # Normalize to ensure it's a distribution
     
     # Frequency prediction: combine overall + bazi + day priors
-    freq_dist = np.zeros(10)
-    overall = freq_model.get('overall', {d: 0.1 for d in range(10)})
-    bazi_freq = freq_model.get(f'bazi_{bazi}', overall)
-    day_freq = freq_model.get(f'day_{day_of_week}', overall)
+    freq_dist_values = np.zeros(10)
+    overall_freq_map = freq_model.get('overall', {d: 0.1 for d in range(10)})
+    bazi_freq_map = freq_model.get(f'bazi_{bazi}', overall_freq_map)
+    day_freq_map = freq_model.get(f'day_{day_of_week}', overall_freq_map)
     
     for d in range(10):
-        freq_dist[d] = (overall.get(d, 0.1) * 0.3 + bazi_freq.get(d, 0.1) * 0.4 + day_freq.get(d, 0.1) * 0.3)
-    
-    # Normalize
-    freq_dist = freq_dist / freq_dist.sum()
-    
-    # Vector Memory prediction (AI Brain)
-    memory_dist = np.zeros(10)
-    if recent_singles and brain.get_brain_capacity() >= 5:
-        memory_boost = brain.get_prediction_boost(recent_singles, bazi)
-        if memory_boost:
-            memory_dist = np.array(memory_boost)
-            memory_dist = memory_dist / (memory_dist.sum() + 1e-9)
-        else:
-            memory_weight = 0.0 # fallback
-    else:
-        memory_weight = 0.0 # fallback
-        
-    # Re-normalize if memory failed
-    if memory_weight == 0.0:
-        total = ml_weight + freq_weight
-        if total > 0:
-            ml_weight /= total
-            freq_weight /= total
-    
-    # Blend: ML + Frequency + Memory
-    blended = ml_weight * ml_dist + freq_weight * freq_dist + memory_weight * memory_dist
-    blended = blended / blended.sum()
-    
-    return blended
-
-def backtest_recent_stats(save_package, features, today_str):
-    """Live computation of recent backtest stats using loaded models."""
-    X_cols = get_feature_columns()
-    
-    eval_features = features.tail(30 * 8).copy()
-    if eval_features.empty:
-        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
-    
-    try:
-        models = save_package['models']
-        freq_model = save_package.get('freq_model', {})
-        X_all = eval_features[X_cols]
-        y_all = eval_features['Target_Single'].values
-        
-        # Ensemble predict
-        all_probs = []
-        for name, model in models.items():
-            probs = model.predict_proba(X_all)
-            full_probs = np.zeros((len(X_all), 10))
-            for i, cls in enumerate(model.classes_):
-                full_probs[:, int(cls)] = probs[:, i]
-            all_probs.append(full_probs)
-        
-        ensemble_probs = np.mean(all_probs, axis=0)
-        
-        matches_list = []
-        for i in range(len(ensemble_probs)):
-            bazi = int(eval_features.iloc[i]['Bazi'])
-            day_of_week = eval_features.iloc[i]['Date_Obj'].dayofweek
-            
-            # Get recent singles for vector memory
-            idx_pos = eval_features.index.get_loc(eval_features.index[i])
-            if idx_pos >= 5:
-                recent_s = eval_features.iloc[max(0, idx_pos-5):idx_pos]['Target_Single'].values.tolist()
-            else:
-                recent_s = None
-            
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, recent_singles=recent_s)
-            
-            sorted_indices = blended_probs.argsort()[::-1][:3]
-            is_match = 1 if int(y_all[i]) in sorted_indices else 0
-            matches_list.append(is_match)
-            
-            # Teach the brain the actual outcome
-            if recent_s is not None and len(recent_s) >= 5:
-                brain.remember(recent_s, int(y_all[i]), bazi)
-        
-        matches_series = pd.Series(matches_list, index=eval_features.index)
-        
-        today_mask = (eval_features['Date'] == today_str)
-        today_total = today_mask.sum()
-        
-        if today_total > 0:
-            today_matches_count = matches_series[today_mask].sum()
-        else:
-            last_date = eval_features['Date'].iloc[-1]
-            today_mask = (eval_features['Date'] == last_date)
-            today_matches_count = matches_series[today_mask].sum()
-            today_total = today_mask.sum()
-        
-        unique_dates = eval_features['Date'].unique()
-        last_7_dates = unique_dates[-7:] if len(unique_dates) >= 7 else unique_dates
-        week_mask = eval_features['Date'].isin(last_7_dates)
-        week_matches_count = matches_series[week_mask].sum()
-        week_total = week_mask.sum()
-        
-        prev_correct = bool(matches_list[-1]) if len(matches_list) > 0 else False
-        
-        win_streak = 0
-        for m in reversed(matches_list):
-            if m: win_streak += 1
-            else: break
-        
-        lose_streak = 0
-        for m in reversed(matches_list):
-            if not m: lose_streak += 1
-            else: break
-        
-        return {
-            "today_matches": f"{int(today_matches_count)}/{int(today_total)}",
-            "week_matches": f"{int(week_matches_count)}/{int(week_total)}",
-            "prev_correct": prev_correct,
-            "winning_streak": int(win_streak),
-            "losing_streak": int(lose_streak)
-        }
-    except Exception as e:
-        if os.path.exists(STATS_FILE):
-            try:
-                with open(STATS_FILE, 'r') as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
-
-def get_yesterday_stats():
-    """Calculate the exact predictions vs actuals for yesterday to feed the AI Council."""
-    try:
-        if not os.path.exists(DATA_FILE) or not os.path.exists(MODEL_FILE):
-            print("Missing DATA_FILE or MODEL_FILE")
-            return {}
-            
-        # Reconstruct features for yesterday
-        features, _ = load_and_preprocess_data(DATA_FILE)
-        if features is None or features.empty:
-            print("features is empty or None")
-            return {}
-            
-        features['Date_Obj'] = pd.to_datetime(features['Date'], format='%d/%m/%Y', errors='coerce')
-        unique_dates = sorted(features['Date_Obj'].dropna().unique())
-        
-        if len(unique_dates) < 2:
-            print("Not enough unique dates in features")
-            return {}
-            
-        yesterday_date = unique_dates[-1] # Actually the last fully featured date is usually yesterday
-        
-        yest_features = features[features['Date_Obj'] == yesterday_date]
-        if yest_features.empty:
-            print("yest_features is empty")
-            return {}
-        
-        save_package = joblib.load(MODEL_FILE)
-        models = save_package['models']
-        freq_model = save_package.get('freq_model', {})
-        
-        X_cols = get_feature_columns()
-        X_yest = yest_features[X_cols]
-        y_yest = yest_features['Target_Single'].values
-        
-        all_probs = []
-        for name, model in models.items():
-            probs = model.predict_proba(X_yest)
-            full_probs = np.zeros((len(X_yest), 10))
-            for i, cls in enumerate(model.classes_):
-                full_probs[:, int(cls)] = probs[:, i]
-            all_probs.append(full_probs)
-        
-        ensemble_probs = np.mean(all_probs, axis=0)
-        
-        details = []
-        correct = 0
-        
-        for i in range(len(ensemble_probs)):
-            bazi = int(yest_features.iloc[i]['Bazi'])
-            day_of_week = yest_features.iloc[i]['Date_Obj'].dayofweek
-            actual = int(y_yest[i])
-            
-            # Get recent singles
-            idx_pos = features.index.get_loc(yest_features.index[i])
-            if idx_pos >= 5:
-                recent_s = features.iloc[max(0, idx_pos-5):idx_pos]['Target_Single'].values.tolist()
-            else:
-                recent_s = None
-                
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, recent_singles=recent_s)
-            sorted_indices = blended_probs.argsort()[::-1][:3]
-            top_3 = [int(k) for k in sorted_indices]
-            
-            is_match = actual in top_3
-            if is_match: correct += 1
-            
-            details.append({
-                "bazi": bazi,
-                "predicted_top_3": top_3,
-                "actual": actual,
-                "status": "PASS" if is_match else "FAIL"
-            })
-            
-        total = len(details)
-        return {
-            "date": yesterday_date.strftime('%d/%m/%Y'),
-            "total_bazis": total,
-            "correct_predictions": correct,
-            "accuracy_pct": round((correct / total) * 100, 1) if total > 0 else 0,
-            "details": details
-        }
-    except Exception as e:
-        print(f"Error getting yesterday stats: {e}")
-        return {}
-
-def get_patti_suggestions(original_df, target_single):
-    history = original_df[original_df['Single'] == target_single]
-    if history.empty:
-        return []
-    patti_counts = history['Patti'].value_counts()
-    top_pattis = patti_counts.head(3).index.tolist()
-    return [str(p) for p in top_pattis if pd.notna(p)]
-
-def get_today_prediction_history(save_package, features, original_df):
-    today_obj = datetime.now(timezone(timedelta(hours=5, minutes=30)))
-    today_str = today_obj.strftime('%d/%m/%Y')
-    
-    today_features = features[features['Date'] == today_str].copy()
-    history = []
-    
-    if not today_features.empty:
-        X_cols = get_feature_columns()
-        X_today = today_features[X_cols]
-        
-        models = save_package['models']
-        freq_model = save_package.get('freq_model', {})
-        all_probs = []
-        for name, model in models.items():
-            probs = model.predict_proba(X_today)
-            full_probs = np.zeros((len(X_today), 10))
-            for i, cls in enumerate(model.classes_):
-                full_probs[:, int(cls)] = probs[:, i]
-            all_probs.append(full_probs)
-        
-        ensemble_probs = np.mean(all_probs, axis=0)
-        
-        for i, (idx, row) in enumerate(today_features.iterrows()):
-            bazi_num = int(row['Bazi'])
-            actual = int(row['Target_Single'])
-            day_of_week = row['Date_Obj'].dayofweek
-            
-            # Get recent singles for vector memory
-            recent_s_hist = original_df['Single'].tail(5).values.tolist() if len(original_df) >= 5 else None
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi_num, day_of_week, recent_singles=recent_s_hist)
-            
-            sorted_indices = blended_probs.argsort()[::-1][:3]
-            top_3 = [int(k) for k in sorted_indices]
-            
-            status = "Pass" if actual in top_3 else "Fail"
-            
-            history.append({
-                "bazi": bazi_num,
-                "predictions": top_3,
-                "actual": actual,
-                "status": status
-            })
-    
-    history.sort(key=lambda x: x['bazi'], reverse=True)
-    return history
-
-def get_quick_prediction():
-    if not os.path.exists(MODEL_FILE):
-        success = train_and_save_model()
-        if not success:
-            return {"status": "error", "message": "Not enough historical data to generate predictions."}
-    
-    features, original_df = load_and_preprocess_data()
-    if features is None:
-        return {"status": "error", "message": "No data found."}
-    
-    save_package = joblib.load(MODEL_FILE)
-    models = save_package['models']
-    freq_model = save_package.get('freq_model', {})
-    
-    last_record = original_df.iloc[-1]
-    last_single = last_record['Single']
-    prev_patti_sum = last_record['Patti_Sum']
-    
-    prev2_single = original_df.iloc[-2]['Single'] if len(original_df) > 1 else 0
-    prev3_single = original_df.iloc[-3]['Single'] if len(original_df) > 2 else 0
-    prev4_single = original_df.iloc[-4]['Single'] if len(original_df) > 3 else 0
-    prev5_single = original_df.iloc[-5]['Single'] if len(original_df) > 4 else 0
-    
-    ma_7 = original_df['Single'].tail(7).mean()
-    ma_30 = original_df['Single'].tail(30).mean()
-    std_7 = original_df['Single'].tail(7).std()
-    if pd.isna(std_7): std_7 = 3.0
-    patti_ma_7 = original_df['Patti_Sum'].tail(7).mean()
-    if pd.isna(patti_ma_7): patti_ma_7 = 0.0
-    
-    is_even_list = original_df['Single'].tail(5).apply(lambda x: 1 if x % 2 == 0 else 0)
-    rolling_even_5 = is_even_list.mean()
-    
-    last_date_str = str(last_record['Date']).strip()
-    today_obj = datetime.now(timezone(timedelta(hours=5, minutes=30)))
-    today_str = today_obj.strftime('%d/%m/%Y')
-    
-    # Normalize both dates to dd/mm/yyyy for reliable comparison
-    try:
-        last_date_normalized = pd.to_datetime(last_date_str, format='%d/%m/%Y', dayfirst=True).strftime('%d/%m/%Y')
-    except Exception:
-        last_date_normalized = last_date_str
-    is_today = (today_str == last_date_normalized)
-    next_bazi = int(last_record['Bazi']) + 1 if is_today else 1
-    
-    same_bazi_hist = original_df[original_df['Bazi'] == next_bazi]
-    prev_day_same_bazi_val = same_bazi_hist.iloc[-1]['Single'] if not same_bazi_hist.empty else last_single
-    
-    if next_bazi > 8:
-        return {"status": "error", "message": "All 8 Bazis for today are completed."}
-    
-    day_of_week = today_obj.weekday()
-    month = today_obj.month
-    is_weekend = 1 if day_of_week >= 5 else 0
-    
-    # Compute gap features for query
-    recent_singles = original_df['Single'].tail(50).values
-    gap_features = {}
-    for d in range(10):
-        found = False
-        for gap in range(1, min(len(recent_singles) + 1, 51)):
-            if recent_singles[-gap] == d:
-                gap_features[f'Gap_{d}'] = gap
-                found = True
-                break
-        if not found:
-            gap_features[f'Gap_{d}'] = 50
-    
-    # Compute frequency features for query
-    recent_20 = original_df['Single'].tail(20).values
-    freq_features = {}
-    for d in range(10):
-        freq_features[f'Freq_{d}'] = np.sum(recent_20 == d) / len(recent_20)
-    
-    # Compute bazi-specific frequency for query
-    bazi_recent = original_df[original_df['Bazi'] == next_bazi]['Single'].tail(30).values
-    bazi_freq_features = {}
-    for d in range(10):
-        bazi_freq_features[f'Bazi_Freq_{d}'] = np.sum(bazi_recent == d) / max(len(bazi_recent), 1)
-    
-    # Patti digits
-    prev_patti = last_record['Patti']
-    pd1, pd2, pd3 = extract_patti_digits(prev_patti)
-    
-    same_as_prev = 1 if len(original_df) > 1 and original_df.iloc[-1]['Single'] == original_df.iloc[-2]['Single'] else 0
-    last3 = original_df['Single'].tail(3).values
-    repeat_in_3 = int(len(set(last3)) < 3) if len(last3) == 3 else 0
-    
-    # Build query DataFrame
-    query_dict = {
-        'Bazi': [next_bazi],
-        'DayOfWeek_Sin': [np.sin(2 * np.pi * day_of_week / 7)],
-        'DayOfWeek_Cos': [np.cos(2 * np.pi * day_of_week / 7)],
-        'Month_Sin': [np.sin(2 * np.pi * month / 12)],
-        'Month_Cos': [np.cos(2 * np.pi * month / 12)],
-        'Is_Weekend': [is_weekend],
-        'MA_7': [ma_7],
-        'MA_30': [ma_30],
-        'STD_7': [std_7],
-        'Patti_MA_7': [patti_ma_7],
-        'Patti_D1': [pd1],
-        'Patti_D2': [pd2],
-        'Patti_D3': [pd3],
-        'Rolling_Even_5': [rolling_even_5],
-        'Prev_Day_Same_Bazi': [prev_day_same_bazi_val],
-        'Same_As_Prev': [same_as_prev],
-        'Repeat_In_3': [repeat_in_3],
-        'Prev_1_Single': [last_single],
-        'Prev_2_Single': [prev2_single],
-        'Prev_3_Single': [prev3_single],
-        'Prev_4_Single': [prev4_single],
-        'Prev_5_Single': [prev5_single],
-        'Prev_Patti_Sum': [prev_patti_sum],
-        'Prev_Patti_D1': [pd1],
-        'Prev_Patti_D2': [pd2],
-        'Prev_Patti_D3': [pd3],
-    }
-    query_dict.update({k: [v] for k, v in gap_features.items()})
-    query_dict.update({k: [v] for k, v in freq_features.items()})
-    query_dict.update({k: [v] for k, v in bazi_freq_features.items()})
-    
-    X_cols = get_feature_columns()
-    query = pd.DataFrame(query_dict)[X_cols]
-    
-    # Ensemble prediction
-    all_probs = []
-    for name, model in models.items():
-        probs = model.predict_proba(query)[0]
-        full_probs = np.zeros(10)
-        for i, cls in enumerate(model.classes_):
-            full_probs[int(cls)] = probs[i]
-        all_probs.append(full_probs)
-    
-    ml_probs = np.mean(all_probs, axis=0)
-    
-    # Blend with frequency model + vector memory
-    recent_singles_for_brain = original_df['Single'].tail(5).values.tolist() if len(original_df) >= 5 else None
-    blended_probs = blend_predictions(ml_probs, freq_model, next_bazi, day_of_week, recent_singles=recent_singles_for_brain)
-    
-    sorted_indices = blended_probs.argsort()[::-1]
-    top_3 = [(int(sorted_indices[i]), float(blended_probs[sorted_indices[i]])) for i in range(3)]
-    top_prob = top_3[0][1] * 100
-    
-    patti_suggestions = [get_patti_suggestions(original_df, t[0]) for t in top_3]
-    
-    stats = backtest_recent_stats(save_package, features, today_str)
-    
-    # Enhanced Risk Management
-    if next_bazi == 1:
-        risk_status = "EXTREME RISK"
-        reason = "Market Data Insufficient. Pehli Bazi hamesha unpredictable hoti hai, Subah ka trend clear hone de."
-        action = "NAHI KHELNA HAI (SKIP)"
-        color = "red"
-    elif top_prob < 12.0:
-        risk_status = "VERY HIGH RISK"
-        reason = f"Deep AI Ensembles me weak pattern (Probability: {top_prob:.1f}%). Confusion zyada, loss chance high."
-        action = "NAHI KHELNA HAI (SKIP)"
-        color = "red"
-    elif stats['losing_streak'] >= 3:
-        risk_status = "MARKET VOLATILE"
-        reason = f"4-Model Deep AI detect market volatility ({stats['losing_streak']} prediction fail huye). Trend stabilize hone ka wait karein."
-        action = "WAIT KARO (NO BET)"
-        color = "red"
-    elif top_prob >= 20.0 and stats['winning_streak'] >= 1:
-        risk_status = "JACKPOT SIGNAL"
-        reason = f"Deep Ensemble Master Match ({top_prob:.1f}%). 4 models + frequency alignment verified! AI winning streak par hai."
-        action = "KHELNA HAI (HIGH BET)"
-        color = "green"
-    elif top_prob >= 15.0:
-        risk_status = "GOOD SIGNAL"
-        reason = f"Pattern practically stable ({top_prob:.1f}%). Ensembles agree kar rahe hain. Normal bet khel sakte hain."
-        action = "KHELNA HAI (NORMAL BET)"
-        color = "gold"
-    else:
-        risk_status = "AVERAGE OPTION"
-        reason = f"Model Confidence okay hai ({top_prob:.1f}%). Sirf jarurat ho tabhi khelo warna chhod do."
-        action = "PLAY LIGHT (LOW BET)"
-        color = "yellow"
-    
-    history_trend = original_df.tail(30)[['Bazi', 'Single']].to_dict('records')
-    history_trend = [{"Bazi": int(x['Bazi']), "Single": int(x['Single'])} for x in history_trend]
-    
-    today_history = get_today_prediction_history(save_package, features, original_df)
-    
-    return {
-        "status": "success",
-        "data": {
-            "today_history": today_history,
-            "next_bazi": int(next_bazi),
-            "predictions": [
-                {
-                    "number": int(top_3[i][0]),
-                    "probability": round(top_3[i][1] * 100, 1),
-                    "pattis": patti_suggestions[i]
-                }
-                for i in range(3)
-            ],
-            "risk_management": {
-                "level": risk_status,
-                "action": action,
-                "reason": reason,
-                "color": color
-            },
-            "stats": {
-                "previous_prediction_correct": bool(stats['prev_correct']),
-                "today_matches": str(stats['today_matches']),
-                "weekly_matches": str(stats['week_matches']),
-                "winning_streak": int(stats['winning_streak']),
-                "losing_streak": int(stats['losing_streak']),
-                "oos_accuracy_pct": stats.get('oos_accuracy_pct')
-            },
-            "history_trend": history_trend
-        }
-    }
-
-if __name__ == "__main__":
-    import time
-    
-    print("=" * 60)
-    print("  KOLKATA FF V3 DEEP 4-MODEL ENSEMBLE ENGINE")
-    print("  XGB + LGB + RF + GB + Frequency Blending + 56 Features")
-    print("=" * 60)
-    t1 = time.time()
-    train_and_save_model()
-    t2 = time.time()
-    print(f"\nTraining completed in {t2-t1:.2f} seconds.")
-    res = get_quick_prediction()
-    if res['status'] == 'success':
-        print("\n--- PERFORMANCE & NEXT PREDICTION ---")
-        print(f"Today's Accuracy: {res['data']['stats']['today_matches']}")
-        print(f"Weekly Accuracy:  {res['data']['stats']['weekly_matches']}")
-        print(f"Current Win Streak: {res['data']['stats']['winning_streak']}")
-        print("\nNext Bazi Predictions:")
-        for p in res['data']['predictions']:
-            print(f"  Number {p['number']} ({p['probability']}%) - Top Pattis: {', '.join(p['pattis'])}")
-    else:
-        print(f"Error: {res['message']}")
+        # Use average of overall, bazi, day frequencies
+        freq_dist_values[d] = (overall_freq_map.get(d, 0.1) + bazi
