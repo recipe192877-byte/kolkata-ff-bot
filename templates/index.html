@@ -682,6 +682,34 @@
                 </div>
             </div>
             
+            <!-- Daily AI Evolution Dashboard -->
+            <div id="evolutionBox" class="chart-container" style="margin-top: 1.5rem; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.05);">
+                <div class="stat-label" style="text-align: center; margin-bottom: 0.8rem; color: #f59e0b;">🤖 DAILY AI EVOLUTION</div>
+                <div id="evoContent" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:8px; margin-bottom:8px;">
+                        <span style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase;">Yesterday (<span id="evoDate">--</span>)</span>
+                        <span id="evoAccuracy" style="font-size:1rem; font-weight:800; color:#10b981;">--%</span>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-bottom:12px;">
+                        <div style="flex:1; background:rgba(0,0,0,0.3); padding:8px; border-radius:8px; text-align:center;">
+                            <div style="font-size:0.7rem; color:var(--text-muted);">HITS</div>
+                            <div id="evoHits" style="font-size:1.2rem; font-weight:800; color:#10b981;">-</div>
+                        </div>
+                        <div style="flex:1; background:rgba(0,0,0,0.3); padding:8px; border-radius:8px; text-align:center;">
+                            <div style="font-size:0.7rem; color:var(--text-muted);">MISSES</div>
+                            <div id="evoMisses" style="font-size:1.2rem; font-weight:800; color:#ef4444;">-</div>
+                        </div>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.3); padding:10px; border-radius:8px; border-left:3px solid #f59e0b;">
+                        <div style="font-size:0.75rem; color:#f59e0b; font-weight:800; margin-bottom:4px;">LATEST AI UPDATE</div>
+                        <div id="evoReason" style="font-size:0.85rem; color:#e2e8f0; line-height:1.4;">Awaiting daily evolution scan...</div>
+                    </div>
+                </div>
+                <div id="evoPending" style="text-align:center; padding:1rem; color:var(--text-muted); font-size:0.85rem;">
+                    Daily AI evolution scan runs at midnight.
+                </div>
+            </div>
+            
             <!-- Statistics Grid -->
             <div id="statsBox" class="stats-grid hidden" style="margin-top: 1.5rem; grid-template-columns: 1fr 1fr 1fr;">
                 <div class="stat-card">
@@ -1205,6 +1233,50 @@
                 btn.style.color = '#10b981';
             }, 10000);
         }
+
+        async function fetchEvolutionData() {
+            try {
+                const response = await fetch('/api/evolution');
+                const data = await response.json();
+                
+                const evoContent = document.getElementById('evoContent');
+                const evoPending = document.getElementById('evoPending');
+                
+                if (data.status === 'success' && data.data) {
+                    evoContent.style.display = 'block';
+                    evoPending.style.display = 'none';
+                    
+                    const report = data.data;
+                    const stats = report.yesterday_stats || {};
+                    const evo = report.evolution_result || {};
+                    
+                    document.getElementById('evoDate').textContent = stats.date || '--';
+                    document.getElementById('evoAccuracy').textContent = `${stats.accuracy_pct || 0}%`;
+                    
+                    const hits = stats.correct_predictions || 0;
+                    const total = stats.total_bazis || 0;
+                    document.getElementById('evoHits').textContent = hits;
+                    document.getElementById('evoMisses').textContent = total - hits;
+                    
+                    if (evo.status === 'success') {
+                        document.getElementById('evoReason').textContent = evo.reason || 'Weights optimized successfully.';
+                    } else {
+                        document.getElementById('evoReason').textContent = evo.message || 'Evolution skipped today.';
+                    }
+                } else {
+                    evoContent.style.display = 'none';
+                    evoPending.style.display = 'block';
+                    evoPending.textContent = data.message || 'Waiting for daily scan...';
+                }
+            } catch (err) {
+                console.error("Evolution fetch error:", err);
+            }
+        }
+
+        // Run on load
+        window.onload = () => {
+            fetchEvolutionData();
+        };
 
     </script>
 </body>

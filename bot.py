@@ -32,6 +32,7 @@ def start_bot():
     last_record_count = 0
     consecutive_failures = 0
     MAX_CONSECUTIVE_FAILURES = 10
+    last_evolution_date = None
     
     while True:
         try:
@@ -57,6 +58,38 @@ def start_bot():
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Brain saved. Capacity: {predict_ml.brain.get_brain_capacity()} patterns")
             else:
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] No new data. Skipping retrain. ({current_count} records)")
+            
+            # Daily AI Evolution - run once per day
+            current_date = datetime.datetime.now().date()
+            if current_date != last_evolution_date:
+                print(f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] Running Daily AI Evolution...")
+                try:
+                    yesterday_stats = predict_ml.get_yesterday_stats()
+                    if yesterday_stats and yesterday_stats.get('total_bazis', 0) > 0:
+                        from ai_council import council
+                        import json
+                        
+                        evo_result = council.hold_evolution_meeting(yesterday_stats)
+                        
+                        report = {
+                            "date_run": datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+                            "target_date": yesterday_stats.get('date'),
+                            "yesterday_stats": yesterday_stats,
+                            "evolution_result": evo_result
+                        }
+                        
+                        if evo_result.get('status') == 'success' and 'config' in evo_result:
+                            predict_ml.save_ai_config(evo_result['config'])
+                            print(f"[EVOLUTION] Successfully updated AI config: {evo_result.get('reason')}")
+                        else:
+                            print(f"[EVOLUTION] Meeting failed or skipped: {evo_result.get('message', 'Unknown error')}")
+                            
+                        with open('daily_report.json', 'w') as f:
+                            json.dump(report, f, indent=4)
+                            
+                        last_evolution_date = current_date
+                except Exception as evo_err:
+                    print(f"Error during daily evolution: {evo_err}")
             
             # Reset failure counter on success
             consecutive_failures = 0

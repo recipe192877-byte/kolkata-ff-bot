@@ -20,6 +20,36 @@ MODEL_FILE = 'xgb_model.joblib'
 FREQ_FILE = 'freq_model.joblib'
 DATA_FILE = 'kolkata_ff_history_advanced.csv'
 STATS_FILE = 'backtest_stats.json'
+CONFIG_FILE = 'ai_config.json'
+
+# Default AI Configuration (can be updated by AI Council Evolution)
+DEFAULT_AI_CONFIG = {
+    "ml_weight": 0.50,
+    "memory_weight": 0.15,
+    "freq_weight": 0.35,
+    "confidence_threshold": 20.0,
+    "risk_tolerance": "MEDIUM"
+}
+
+def load_ai_config():
+    """Load dynamic AI weights and settings."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                # Ensure all keys exist
+                for k, v in DEFAULT_AI_CONFIG.items():
+                    if k not in config:
+                        config[k] = v
+                return config
+        except Exception:
+            return DEFAULT_AI_CONFIG
+    return DEFAULT_AI_CONFIG
+
+def save_ai_config(config):
+    """Save updated AI weights and settings."""
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=4)
 
 # ============================================================
 #                FEATURE ENGINEERING V3 (DEEP)
@@ -414,8 +444,34 @@ def train_and_save_model():
 #               LIVE PREDICTION & STATS
 # ============================================================
 
-def blend_predictions(ml_probs, freq_model, bazi, day_of_week, ml_weight=0.55, recent_singles=None):
-    """Blend ML + Frequency + Vector Memory predictions for best accuracy."""
+def load_ai_config():
+    if os.path.exists('ai_config.json'):
+        with open('ai_config.json', 'r') as f:
+            return json.load(f)
+    return {"ml_weight": 0.50, "memory_weight": 0.15, "freq_weight": 0.35}
+
+def save_ai_config(config):
+    with open('ai_config.json', 'w') as f:
+        json.dump(config, f)
+
+def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=None):
+    """Blend Machine Learning probabilities with Frequency model and Vector Memory."""
+    
+    # Load dynamic weights from config
+    config = load_ai_config()
+    ml_weight = config.get("ml_weight", 0.50)
+    memory_weight = config.get("memory_weight", 0.15)
+    freq_weight = config.get("freq_weight", 0.35)
+    
+    # Normalize weights just in case
+    total = ml_weight + memory_weight + freq_weight
+    if total > 0:
+        ml_weight /= total
+        memory_weight /= total
+        freq_weight /= total
+    else:
+        ml_weight, memory_weight, freq_weight = 0.50, 0.15, 0.35
+    
     # ML prediction (ensemble average)
     ml_dist = ml_probs.copy()
     
@@ -432,16 +488,23 @@ def blend_predictions(ml_probs, freq_model, bazi, day_of_week, ml_weight=0.55, r
     freq_dist = freq_dist / freq_dist.sum()
     
     # Vector Memory prediction (AI Brain)
-    memory_weight = 0.0
     memory_dist = np.zeros(10)
-    if recent_singles is not None and len(recent_singles) >= 5:
-        mem_boost = brain.get_prediction_boost(recent_singles, bazi)
-        if mem_boost is not None:
-            memory_dist = np.array(mem_boost)
-            memory_weight = 0.15  # Give brain 15% weight
-            ml_weight = 0.50  # Reduce ML to compensate
-    
-    freq_weight = 1.0 - ml_weight - memory_weight
+    if recent_singles and brain.get_brain_capacity() >= 5:
+        memory_boost = brain.get_prediction_boost(recent_singles, bazi)
+        if memory_boost:
+            memory_dist = np.array(memory_boost)
+            memory_dist = memory_dist / (memory_dist.sum() + 1e-9)
+        else:
+            memory_weight = 0.0 # fallback
+    else:
+        memory_weight = 0.0 # fallback
+        
+    # Re-normalize if memory failed
+    if memory_weight == 0.0:
+        total = ml_weight + freq_weight
+        if total > 0:
+            ml_weight /= total
+            freq_weight /= total
     
     # Blend: ML + Frequency + Memory
     blended = ml_weight * ml_dist + freq_weight * freq_dist + memory_weight * memory_dist
@@ -486,7 +549,7 @@ def backtest_recent_stats(save_package, features, today_str):
             else:
                 recent_s = None
             
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, ml_weight=0.55, recent_singles=recent_s)
+            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, recent_singles=recent_s)
             
             sorted_indices = blended_probs.argsort()[::-1][:3]
             is_match = 1 if int(y_all[i]) in sorted_indices else 0
@@ -543,6 +606,92 @@ def backtest_recent_stats(save_package, features, today_str):
                 pass
         return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
 
+def get_yesterday_stats():
+    """Calculate the exact predictions vs actuals for yesterday to feed the AI Council."""
+    try:
+        if not os.path.exists(DATA_FILE) or not os.path.exists(MODEL_FILE):
+            print("Missing DATA_FILE or MODEL_FILE")
+            return {}
+            
+        # Reconstruct features for yesterday
+        features, _ = load_and_preprocess_data(DATA_FILE)
+        if features is None or features.empty:
+            print("features is empty or None")
+            return {}
+            
+        features['Date_Obj'] = pd.to_datetime(features['Date'], format='%d/%m/%Y', errors='coerce')
+        unique_dates = sorted(features['Date_Obj'].dropna().unique())
+        
+        if len(unique_dates) < 2:
+            print("Not enough unique dates in features")
+            return {}
+            
+        yesterday_date = unique_dates[-1] # Actually the last fully featured date is usually yesterday
+        
+        yest_features = features[features['Date_Obj'] == yesterday_date]
+        if yest_features.empty:
+            print("yest_features is empty")
+            return {}
+        
+        save_package = joblib.load(MODEL_FILE)
+        models = save_package['models']
+        freq_model = save_package.get('freq_model', {})
+        
+        X_cols = get_feature_columns()
+        X_yest = yest_features[X_cols]
+        y_yest = yest_features['Target_Single'].values
+        
+        all_probs = []
+        for name, model in models.items():
+            probs = model.predict_proba(X_yest)
+            full_probs = np.zeros((len(X_yest), 10))
+            for i, cls in enumerate(model.classes_):
+                full_probs[:, int(cls)] = probs[:, i]
+            all_probs.append(full_probs)
+        
+        ensemble_probs = np.mean(all_probs, axis=0)
+        
+        details = []
+        correct = 0
+        
+        for i in range(len(ensemble_probs)):
+            bazi = int(yest_features.iloc[i]['Bazi'])
+            day_of_week = yest_features.iloc[i]['Date_Obj'].dayofweek
+            actual = int(y_yest[i])
+            
+            # Get recent singles
+            idx_pos = features.index.get_loc(yest_features.index[i])
+            if idx_pos >= 5:
+                recent_s = features.iloc[max(0, idx_pos-5):idx_pos]['Target_Single'].values.tolist()
+            else:
+                recent_s = None
+                
+            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, recent_singles=recent_s)
+            sorted_indices = blended_probs.argsort()[::-1][:3]
+            top_3 = [int(k) for k in sorted_indices]
+            
+            is_match = actual in top_3
+            if is_match: correct += 1
+            
+            details.append({
+                "bazi": bazi,
+                "predicted_top_3": top_3,
+                "actual": actual,
+                "status": "PASS" if is_match else "FAIL"
+            })
+            
+        total = len(details)
+        return {
+            "date": yesterday_date.strftime('%d/%m/%Y'),
+            "total_bazis": total,
+            "correct_predictions": correct,
+            "accuracy_pct": round((correct / total) * 100, 1) if total > 0 else 0,
+            "details": details
+        }
+    except Exception as e:
+        print(f"Error getting yesterday stats: {e}")
+        return {}
+
 def get_patti_suggestions(original_df, target_single):
     history = original_df[original_df['Single'] == target_single]
     if history.empty:
@@ -581,7 +730,7 @@ def get_today_prediction_history(save_package, features, original_df):
             
             # Get recent singles for vector memory
             recent_s_hist = original_df['Single'].tail(5).values.tolist() if len(original_df) >= 5 else None
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi_num, day_of_week, ml_weight=0.55, recent_singles=recent_s_hist)
+            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi_num, day_of_week, recent_singles=recent_s_hist)
             
             sorted_indices = blended_probs.argsort()[::-1][:3]
             top_3 = [int(k) for k in sorted_indices]
@@ -735,7 +884,7 @@ def get_quick_prediction():
     
     # Blend with frequency model + vector memory
     recent_singles_for_brain = original_df['Single'].tail(5).values.tolist() if len(original_df) >= 5 else None
-    blended_probs = blend_predictions(ml_probs, freq_model, next_bazi, day_of_week, ml_weight=0.55, recent_singles=recent_singles_for_brain)
+    blended_probs = blend_predictions(ml_probs, freq_model, next_bazi, day_of_week, recent_singles=recent_singles_for_brain)
     
     sorted_indices = blended_probs.argsort()[::-1]
     top_3 = [(int(sorted_indices[i]), float(blended_probs[sorted_indices[i]])) for i in range(3)]

@@ -226,6 +226,17 @@ def api_council_last():
 def api_council_log():
     """Get all council meeting history."""
     return jsonify({"status": "success", "meetings": council.get_meeting_log()})
+@app.route('/api/evolution')
+def api_evolution():
+    """Get the daily AI Evolution report (yesterday's stats + AI config updates)."""
+    try:
+        if os.path.exists('daily_report.json'):
+            with open('daily_report.json', 'r') as f:
+                return jsonify({"status": "success", "data": json.load(f)})
+        else:
+            return jsonify({"status": "pending", "message": "No daily evolution report generated yet. It will run automatically at midnight."})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Evolution report error: {str(e)}"})
 
 
 def run():

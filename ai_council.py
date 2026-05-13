@@ -267,6 +267,77 @@ Stats:
         """Return meeting history."""
         return self.meeting_log
 
+    def hold_evolution_meeting(self, yesterday_stats):
+        """
+        Hold a daily evolution meeting to tweak system weights based on performance.
+        Returns updated config and reason.
+        """
+        if not self.api_key:
+            return {"status": "error", "message": "No API Key for Evolution"}
+
+        evolution_prompt = f"""You are the Chief AI Architect for the Kolkata FF bot.
+Your job is to optimize the system's prediction logic daily by tweaking algorithm weights.
+Here is the performance report for yesterday:
+
+Total Bazis Played: {yesterday_stats.get('total_bazis', 0)}
+Correct Predictions: {yesterday_stats.get('correct_predictions', 0)}
+Accuracy: {yesterday_stats.get('accuracy_pct', 0)}%
+Pass/Fail Details:
+{json.dumps(yesterday_stats.get('details', []), indent=2)}
+
+Currently, the system blends three models:
+1. ML Ensemble (xgboost, lightgbm, etc.)
+2. Frequency Model (statistical)
+3. Vector Memory (AI Brain pattern matching)
+
+Based on yesterday's performance, provide the NEW optimal weights (they must sum to 1.0).
+Also provide a 1-2 sentence reason for your change.
+
+Format your response EXACTLY as JSON:
+{{
+  "ml_weight": 0.50,
+  "memory_weight": 0.20,
+  "freq_weight": 0.30,
+  "reason": "Increased memory weight because patterns were highly repetitive yesterday."
+}}
+
+IMPORTANT: Return ONLY the JSON, no markdown formatting."""
+
+        response = self._call_ai(
+            model='openrouter/free',
+            system_prompt='You are an elite machine learning engineer. Respond only with valid JSON.',
+            user_prompt=evolution_prompt,
+            max_tokens=250
+        )
+
+        try:
+            # Extract JSON
+            json_start = response.find('{')
+            json_end = response.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                config = json.loads(response[json_start:json_end])
+                
+                # Validation
+                ml = float(config.get('ml_weight', 0.5))
+                mem = float(config.get('memory_weight', 0.15))
+                freq = float(config.get('freq_weight', 0.35))
+                total = ml + mem + freq
+                
+                if total > 0:
+                    return {
+                        "status": "success",
+                        "config": {
+                            "ml_weight": ml / total,
+                            "memory_weight": mem / total,
+                            "freq_weight": freq / total
+                        },
+                        "reason": config.get('reason', 'Automatic system tuning applied.')
+                    }
+        except Exception as e:
+            print(f"[EVOLUTION] Failed to parse AI response: {e}")
+
+        return {"status": "error", "message": "Failed to generate evolution config"}
+
 
 # Global council instance
 council = AICouncil()
