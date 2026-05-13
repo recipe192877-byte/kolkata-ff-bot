@@ -5,6 +5,7 @@ import time
 import json
 import scraper
 import predict_ml_v2 as predict_ml
+from auto_healer import healer
 
 app = Flask(__name__)
 last_scrape_time = 0
@@ -129,6 +130,8 @@ def api_health():
         "model_loaded": has_model,
         "data_available": has_data,
         "oos_accuracy_pct": oos_accuracy,
+        "brain_capacity": predict_ml.brain.get_brain_capacity(),
+        "healer": healer.get_status(),
         "uptime": int(time.time()),
         "cache_size": len(_cache)
     })
@@ -157,6 +160,26 @@ def api_heatmap():
         return jsonify(resp)
     except Exception as e:
         return jsonify({"status": "error", "message": f"Heatmap error: {str(e)}"})
+
+
+@app.route('/api/heal')
+def api_heal():
+    """View the Auto-Healer log — shows all diagnosed errors."""
+    try:
+        log = healer.get_log()
+        status = healer.get_status()
+        return jsonify({"status": "success", "healer_status": status, "heal_log": log})
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Heal log error: {str(e)}"})
+
+
+@app.route('/api/heal/status')
+def api_heal_status():
+    """Check Auto-Healer health."""
+    try:
+        return jsonify({"status": "success", "data": healer.get_status()})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 
 
 def run():

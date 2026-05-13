@@ -10,7 +10,11 @@ import lightgbm as lgb
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
+from vector_memory import KolkataVectorMemory
 warnings.filterwarnings('ignore')
+
+# ── Self-Learning AI Brain ──
+brain = KolkataVectorMemory(context_size=5, db_path='kolkata_brain.json')
 
 MODEL_FILE = 'xgb_model.joblib'
 FREQ_FILE = 'freq_model.joblib'
@@ -410,8 +414,8 @@ def train_and_save_model():
 #               LIVE PREDICTION & STATS
 # ============================================================
 
-def blend_predictions(ml_probs, freq_model, bazi, day_of_week, ml_weight=0.65):
-    """Blend ML predictions with frequency-based predictions for better accuracy."""
+def blend_predictions(ml_probs, freq_model, bazi, day_of_week, ml_weight=0.55, recent_singles=None):
+    """Blend ML + Frequency + Vector Memory predictions for best accuracy."""
     # ML prediction (ensemble average)
     ml_dist = ml_probs.copy()
     
@@ -427,8 +431,20 @@ def blend_predictions(ml_probs, freq_model, bazi, day_of_week, ml_weight=0.65):
     # Normalize
     freq_dist = freq_dist / freq_dist.sum()
     
-    # Blend: ML + Frequency
-    blended = ml_weight * ml_dist + (1 - ml_weight) * freq_dist
+    # Vector Memory prediction (AI Brain)
+    memory_weight = 0.0
+    memory_dist = np.zeros(10)
+    if recent_singles is not None and len(recent_singles) >= 5:
+        mem_boost = brain.get_prediction_boost(recent_singles, bazi)
+        if mem_boost is not None:
+            memory_dist = np.array(mem_boost)
+            memory_weight = 0.15  # Give brain 15% weight
+            ml_weight = 0.50  # Reduce ML to compensate
+    
+    freq_weight = 1.0 - ml_weight - memory_weight
+    
+    # Blend: ML + Frequency + Memory
+    blended = ml_weight * ml_dist + freq_weight * freq_dist + memory_weight * memory_dist
     blended = blended / blended.sum()
     
     return blended
@@ -463,11 +479,22 @@ def backtest_recent_stats(save_package, features, today_str):
             bazi = int(eval_features.iloc[i]['Bazi'])
             day_of_week = eval_features.iloc[i]['Date_Obj'].dayofweek
             
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, ml_weight=0.65)
+            # Get recent singles for vector memory
+            idx_pos = eval_features.index.get_loc(eval_features.index[i])
+            if idx_pos >= 5:
+                recent_s = eval_features.iloc[max(0, idx_pos-5):idx_pos]['Target_Single'].values.tolist()
+            else:
+                recent_s = None
+            
+            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, ml_weight=0.55, recent_singles=recent_s)
             
             sorted_indices = blended_probs.argsort()[::-1][:3]
-            matches_list.append(1 if int(y_all[i]) in sorted_indices else 0)
-
+            is_match = 1 if int(y_all[i]) in sorted_indices else 0
+            matches_list.append(is_match)
+            
+            # Teach the brain the actual outcome
+            if recent_s is not None and len(recent_s) >= 5:
+                brain.remember(recent_s, int(y_all[i]), bazi)
         
         matches_series = pd.Series(matches_list, index=eval_features.index)
         
@@ -552,7 +579,9 @@ def get_today_prediction_history(save_package, features, original_df):
             actual = int(row['Target_Single'])
             day_of_week = row['Date_Obj'].dayofweek
             
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi_num, day_of_week, ml_weight=0.65)
+            # Get recent singles for vector memory
+            recent_s_hist = original_df['Single'].tail(5).values.tolist() if len(original_df) >= 5 else None
+            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi_num, day_of_week, ml_weight=0.55, recent_singles=recent_s_hist)
             
             sorted_indices = blended_probs.argsort()[::-1][:3]
             top_3 = [int(k) for k in sorted_indices]
@@ -704,8 +733,9 @@ def get_quick_prediction():
     
     ml_probs = np.mean(all_probs, axis=0)
     
-    # Blend with frequency model
-    blended_probs = blend_predictions(ml_probs, freq_model, next_bazi, day_of_week, ml_weight=0.65)
+    # Blend with frequency model + vector memory
+    recent_singles_for_brain = original_df['Single'].tail(5).values.tolist() if len(original_df) >= 5 else None
+    blended_probs = blend_predictions(ml_probs, freq_model, next_bazi, day_of_week, ml_weight=0.55, recent_singles=recent_singles_for_brain)
     
     sorted_indices = blended_probs.argsort()[::-1]
     top_3 = [(int(sorted_indices[i]), float(blended_probs[sorted_indices[i]])) for i in range(3)]
