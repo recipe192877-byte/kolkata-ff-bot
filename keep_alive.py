@@ -286,5 +286,5 @@ def keep_alive():
     t.start()
     
     # Start the Daily RuFlo Code Upgrade Scanner
-    t_ruflo = Thread(target=_daily_ruflo_scan, daemon=True)
-    t_ruflo.start()
+    # t_ruflo = Thread(target=_daily_ruflo_scan, daemon=True)
+    # t_ruflo.start()
