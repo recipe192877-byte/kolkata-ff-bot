@@ -157,10 +157,6 @@ Here is the code:
             print(f"[RUFLO_HEALER] AI call failed: {str(e)}")
             return None
 
-        except Exception as e:
-            print(f"[RUFLO_HEALER] AI call failed: {str(e)}")
-            return None
-
     def chat_and_execute(self, user_message):
         """Interactive chat with the user. Can answer questions or execute code changes."""
         if not self.api_key:
@@ -254,9 +250,6 @@ IMPORTANT: If you modify a file, you MUST provide the ENTIRE file's code, not ju
                     print(f"Model {model} failed. Trying next...")
 
             return {"reply": "Error: All free AI models failed to respond. Please check your internet or recharge credits.", "modifications": []}
-        except Exception as e:
-            return {"reply": f"Error contacting RuFlo API: {str(e)}", "modifications": []}
-
         except Exception as e:
             return {"reply": f"Error contacting RuFlo API: {str(e)}", "modifications": []}
 
