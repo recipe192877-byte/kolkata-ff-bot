@@ -78,6 +78,8 @@ class AICouncil:
         models_to_try = [model]
         if 'free' in model:
             models_to_try = [
+                'deepseek/deepseek-r1:free',
+                'deepseek/deepseek-chat:free',
                 'meta-llama/llama-3.3-70b-instruct:free',
                 'nvidia/nemotron-3-super-120b-a12b:free',
                 'openai/gpt-oss-120b:free',
