@@ -1,7 +1,4 @@
 __pycache__/
 *.pyc
 *.pyo
-xgb_model.joblib
-freq_model.joblib
 backtest_stats.json
-*.joblib

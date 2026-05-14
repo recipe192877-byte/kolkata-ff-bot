@@ -74,24 +74,25 @@ class AICouncil:
         if not self.api_key:
             return None
 
-        # Fallback list for free models
+        # Fallback list — verified live free models (May 2026)
         models_to_try = [model]
         if 'free' in model:
             models_to_try = [
-                'google/gemma-3-27b-it:free',
-                'google/gemma-4-27b-it:free',
-                'google/gemini-2.0-flash-exp:free',
-                'google/gemini-2.5-flash-preview:free',
-                'meta-llama/llama-4-maverick:free',
                 'meta-llama/llama-3.3-70b-instruct:free',
-                'mistralai/mistral-small-3.1-24b-instruct:free',
-                'qwen/qwen3-32b:free',
-                'qwen/qwen-2.5-72b-instruct:free',
-                'deepseek/deepseek-chat:free',
-                'deepseek/deepseek-r1:free',
-                'nvidia/llama-3.1-nemotron-70b-instruct:free',
-                'microsoft/phi-4-reasoning:free',
+                'nvidia/nemotron-3-super-120b-a12b:free',
+                'openai/gpt-oss-120b:free',
+                'openai/gpt-oss-20b:free',
+                'google/gemma-4-31b-it:free',
+                'google/gemma-4-26b-a4b-it:free',
+                'deepseek/deepseek-v4-flash:free',
+                'qwen/qwen3-coder:free',
+                'qwen/qwen3-next-80b-a3b-instruct:free',
+                'nvidia/nemotron-3-nano-30b-a3b:free',
+                'nvidia/nemotron-nano-9b-v2:free',
                 'nousresearch/hermes-3-llama-3.1-405b:free',
+                'minimax/minimax-m2.5:free',
+                'meta-llama/llama-3.2-3b-instruct:free',
+                'z-ai/glm-4.5-air:free',
                 'openrouter/free',
             ]
 
