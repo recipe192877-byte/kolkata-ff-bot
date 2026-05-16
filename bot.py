@@ -106,7 +106,10 @@ def start_bot():
                         report_filename = f"reports/daily_report_{current_date.strftime('%Y%m%d')}.json"
                         with open(report_filename, 'w') as f:
                             json.dump(report, f, indent=4)
-                        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Daily evolution report saved to {report_filename}")
+                        # Keep the root daily_report.json updated for the API
+                        with open('daily_report.json', 'w') as f:
+                            json.dump(report, f, indent=4)
+                        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Daily evolution report saved to {report_filename} and daily_report.json")
 
                         last_evolution_date = current_date
                     else:
