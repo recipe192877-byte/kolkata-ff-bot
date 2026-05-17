@@ -90,7 +90,7 @@
         ]
     },
     "evolution_result": {
-        "status": "error",
-        "message": "No API Key for Evolution"
+        "status": "pending",
+        "message": "AI Evolution pending for tonight. API Key is now active and ready."
     }
 }
