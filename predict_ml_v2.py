@@ -11,6 +11,9 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import TimeSeriesSplit
 from vector_memory import KolkataVectorMemory
+from dotenv import load_dotenv
+
+load_dotenv()
 warnings.filterwarnings('ignore')
 
 # ── Self-Learning AI Brain ──

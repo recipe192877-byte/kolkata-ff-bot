@@ -10,6 +10,9 @@ import json
 import time
 import requests
 from datetime import datetime, timezone, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 IST = timezone(timedelta(hours=5, minutes=30))

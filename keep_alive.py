@@ -7,6 +7,9 @@ import scraper
 import predict_ml_v2 as predict_ml
 from ruflo_healer import RuFloHealer
 from ai_council import council
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ruflo_upgrader = RuFloHealer()
 

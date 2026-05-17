@@ -10,3 +10,4 @@ lxml
 xgboost
 lightgbm
 gunicorn
+python-dotenv

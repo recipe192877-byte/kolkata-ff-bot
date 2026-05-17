@@ -5,6 +5,10 @@ import os
 import pandas as pd
 import scraper
 import predict_ml_v2 as predict_ml
+from dotenv import load_dotenv
+
+load_dotenv()
+
 def safe_scrape():
     """Scrape directly, AI diagnosis is now handled by RuFlo Upgrader daily."""
     return scraper.scrape_kolkata_ff()

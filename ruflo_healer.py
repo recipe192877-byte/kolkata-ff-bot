@@ -3,6 +3,9 @@ import requests
 import json
 import time
 from github_sync import upload_to_github
+from dotenv import load_dotenv
+
+load_dotenv()
 
 OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 # Target files to autonomously rewrite
