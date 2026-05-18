@@ -447,15 +447,9 @@ def train_and_save_model():
 #               LIVE PREDICTION & STATS
 # ============================================================
 
-def load_ai_config():
-    if os.path.exists('ai_config.json'):
-        with open('ai_config.json', 'r') as f:
-            return json.load(f)
-    return {"ml_weight": 0.50, "memory_weight": 0.15, "freq_weight": 0.35}
+# Note: load_ai_config() and save_ai_config() are defined at the top of this file (lines 37-55)
+# with DEFAULT_AI_CONFIG fallback support. Do NOT redefine them here.
 
-def save_ai_config(config):
-    with open('ai_config.json', 'w') as f:
-        json.dump(config, f)
 
 def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=None):
     """Blend Machine Learning probabilities with Frequency model and Vector Memory."""

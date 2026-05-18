@@ -80,9 +80,9 @@ def start_bot():
             else:
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%M')}] No new data. Skipping retrain. ({current_count} records)")
             
-            # Daily AI Evolution - run once per day
+            # Daily AI Evolution - run once per day (with retry on failure)
             current_date = datetime.datetime.now().date()
-            if last_evolution_date is None or current_date != last_evolution_date: # Ensure evolution runs on first start of a new day
+            if last_evolution_date is None or current_date != last_evolution_date:
                 print(f"\n[{datetime.datetime.now().strftime('%H:%M:%S')}] Running Daily AI Evolution...")
                 try:
                     yesterday_stats = predict_ml.get_yesterday_stats()
@@ -102,8 +102,10 @@ def start_bot():
                         if evo_result.get('status') == 'success' and 'config' in evo_result:
                             predict_ml.save_ai_config(evo_result['config'])
                             print(f"[EVOLUTION] Successfully updated AI config: {evo_result.get('reason')}")
+                            last_evolution_date = current_date  # Mark as done ONLY on success
                         else:
-                            print(f"[EVOLUTION] Meeting failed or skipped: {evo_result.get('message', 'Unknown error')}")
+                            print(f"[EVOLUTION] Meeting failed: {evo_result.get('message', 'Unknown error')}. Will retry on next cycle.")
+                            # DON'T set last_evolution_date — allow retry on next loop cycle
                             
                         # Ensure the 'reports' directory exists
                         os.makedirs('reports', exist_ok=True)
@@ -115,15 +117,16 @@ def start_bot():
                             json.dump(report, f, indent=4)
                         print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Daily evolution report saved to {report_filename} and daily_report.json")
 
-                        last_evolution_date = current_date
                     else:
-                        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Not enough data for yesterday to run AI Evolution or stats not available. Proceeding with last_evolution_date update.")
-                        last_evolution_date = current_date # Mark as run to avoid re-running on same day if not enough data
+                        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Not enough data for yesterday to run AI Evolution or stats not available.")
+                        last_evolution_date = current_date  # No data to evolve on, skip for today
                 except ImportError:
                     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] AI Council module not found. Skipping daily evolution.")
+                    last_evolution_date = current_date  # Module missing, won't help to retry
                 except Exception as evo_err:
                     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Error during daily evolution: {evo_err}")
                     traceback.print_exc()
+                    # DON'T set last_evolution_date — allow retry on next loop cycle
 
             # Reset failure counter on success
             consecutive_failures = 0

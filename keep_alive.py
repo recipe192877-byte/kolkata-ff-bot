@@ -72,8 +72,8 @@ def api_predict():
 
         # FIX: Auto-fetch in background thread (non-blocking) to avoid timeout
         current_time = time.time()
-        # Trigger scrape if data is older than 5 minutes
-        if (current_time - last_scrape_time) > 300:
+        # Trigger scrape if data is older than 5 minutes OR on cold start (last_scrape_time == 0)
+        if last_scrape_time == 0 or (current_time - last_scrape_time) > 300:
             Thread(target=_background_scrape, daemon=True).start()
             
         result = predict_ml.get_quick_prediction()

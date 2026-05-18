@@ -68,9 +68,17 @@ class AICouncil:
     """Multi-AI Swarm Intelligence for consensus-based predictions."""
 
     def __init__(self):
+        # Re-load .env as safety net (no-op if already loaded or file missing)
+        load_dotenv(override=False)
         self.api_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
         self.last_meeting = None
         self.meeting_log = []
+        # Diagnostic logging for deployment debugging
+        if self.api_key:
+            masked = self.api_key[:8] + '...' + self.api_key[-4:]
+            print(f"[COUNCIL] API Key loaded: {masked}")
+        else:
+            print("[COUNCIL] ⚠️ WARNING: No OPENROUTER_API_KEY found! Set it in Render Dashboard → Environment, NOT in .env file.")
 
     def _call_ai(self, model, system_prompt, user_prompt, max_tokens=300):
         """Call AI models with fallback support."""
@@ -104,7 +112,7 @@ class AICouncil:
                     headers={
                         'Content-Type': 'application/json',
                         'Authorization': f'Bearer {self.api_key}',
-                        'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
+                        'HTTP-Referer': 'https://kolkata-ff-bot-7955.onrender.com',
                         'X-Title': 'Kolkata FF AI Council'
                     },
                     json={
@@ -296,7 +304,7 @@ Stats:
         Returns updated config and reason.
         """
         if not self.api_key:
-            return {"status": "error", "message": "No API Key for Evolution"}
+            return {"status": "error", "message": "No API Key for Evolution. Set OPENROUTER_API_KEY in Render Dashboard → Environment."}
 
         evolution_prompt = f"""You are the Chief AI Architect for the Kolkata FF bot.
 Your job is to optimize the system's prediction logic daily by tweaking algorithm weights.
@@ -333,12 +341,22 @@ IMPORTANT: Return ONLY the JSON, no markdown formatting."""
             max_tokens=250
         )
 
+        if not response:
+            print("[EVOLUTION] AI returned no response. All models may be down.")
+            return {"status": "error", "message": "AI returned no response. All free models may be temporarily unavailable."}
+
         try:
+            # Strip markdown code fences that some models add
+            import re
+            cleaned = response.strip()
+            cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+            cleaned = re.sub(r'\s*```$', '', cleaned)
+
             # Extract JSON
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
+            json_start = cleaned.find('{')
+            json_end = cleaned.rfind('}') + 1
             if json_start != -1 and json_end > json_start:
-                config = json.loads(response[json_start:json_end])
+                config = json.loads(cleaned[json_start:json_end])
                 
                 # Validation
                 ml = float(config.get('ml_weight', 0.5))
@@ -350,14 +368,18 @@ IMPORTANT: Return ONLY the JSON, no markdown formatting."""
                     return {
                         "status": "success",
                         "config": {
-                            "ml_weight": ml / total,
-                            "memory_weight": mem / total,
-                            "freq_weight": freq / total
+                            "ml_weight": round(ml / total, 4),
+                            "memory_weight": round(mem / total, 4),
+                            "freq_weight": round(freq / total, 4)
                         },
                         "reason": config.get('reason', 'Automatic system tuning applied.')
                     }
+            
+            print(f"[EVOLUTION] Could not find valid JSON in response: {cleaned[:200]}")
+        except json.JSONDecodeError as e:
+            print(f"[EVOLUTION] JSON parse error: {e}. Raw response: {response[:200]}")
         except Exception as e:
-            print(f"[EVOLUTION] Failed to parse AI response: {e}")
+            print(f"[EVOLUTION] Failed to parse AI response: {e}. Raw: {response[:200]}")
 
         return {"status": "error", "message": "Failed to generate evolution config"}
 
