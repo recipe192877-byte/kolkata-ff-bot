@@ -959,6 +959,68 @@ def get_quick_prediction():
         }
     }
 
+def get_today_accuracy():
+    """Get today's prediction accuracy by comparing predictions with actual results."""
+    try:
+        if not os.path.exists(DATA_FILE) or not os.path.exists(MODEL_FILE):
+            return {"status": "error", "message": "Model or data not found"}
+            
+        features, original_df = load_and_preprocess_data()
+        if features is None:
+            return {"status": "error", "message": "No data found"}
+            
+        save_package = joblib.load(MODEL_FILE)
+        today_obj = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+        today_str = today_obj.strftime('%d/%m/%Y')
+        
+        # Get today's actual results
+        today_actuals = original_df[original_df['Date'] == today_str]
+        if today_actuals.empty:
+            return {"status": "error", "message": "No results for today yet"}
+            
+        # Get today's predictions
+        prediction_data = get_quick_prediction()
+        if prediction_data['status'] != 'success':
+            return prediction_data
+            
+        today_predictions = prediction_data['data']['today_history']
+        
+        # Compare predictions with actuals
+        correct_count = 0
+        total_count = 0
+        
+        for actual in today_actuals.itertuples():
+            actual_bazi = actual.Bazi
+            actual_single = actual.Single
+            
+            # Find prediction for this bazi
+            pred_found = False
+            for pred in today_predictions:
+                if pred['bazi'] == actual_bazi:
+                    pred_found = True
+                    if actual_single in pred['predictions']:
+                        correct_count += 1
+                    total_count += 1
+                    break
+            
+            # If no prediction found for this bazi, count it as incorrect
+            if not pred_found:
+                total_count += 1
+        
+        accuracy = (correct_count / total_count * 100) if total_count > 0 else 0
+        
+        return {
+            "status": "success",
+            "data": {
+                "correct_predictions": correct_count,
+                "total_predictions": total_count,
+                "accuracy_percent": round(accuracy, 1),
+                "date": today_str
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Error calculating accuracy: {str(e)}"}
+
 if __name__ == "__main__":
     import time
     
