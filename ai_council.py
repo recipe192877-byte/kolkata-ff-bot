@@ -71,70 +71,63 @@ class AICouncil:
         # Re-load .env as safety net (no-op if already loaded or file missing)
         load_dotenv(override=False)
         self.api_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
+        self.gemini_key = os.environ.get('GEMINI_API_KEY', 'AIzaSyCwb5cLbFWnaZqh4Uzkow2L6ZCO4RDzFtg').strip()
         self.last_meeting = None
         self.meeting_log = []
         # Diagnostic logging for deployment debugging
-        if self.api_key:
-            masked = self.api_key[:8] + '...' + self.api_key[-4:]
-            print(f"[COUNCIL] API Key loaded: {masked}")
+        if self.gemini_key:
+            masked = self.gemini_key[:8] + '...' + self.gemini_key[-4:]
+            print(f"[COUNCIL] Gemini API Key loaded: {masked}")
         else:
-            print("[COUNCIL] ⚠️ WARNING: No OPENROUTER_API_KEY found! Set it in Render Dashboard → Environment, NOT in .env file.")
+            print("[COUNCIL] ⚠️ WARNING: No GEMINI_API_KEY found! Set it in environment variables.")
 
-    def _call_ai(self, model, system_prompt, user_prompt, max_tokens=300):
-        """Call AI models with fallback support."""
-        if not self.api_key:
+    def _call_ai(self, model, system_prompt, user_prompt, max_tokens=8000):
+        """Call direct Gemini API with retries on temporary errors."""
+        if not self.gemini_key:
             return None
 
-        # Top-rated free models only (Rating > 3.8) — verified May 2026
-        models_to_try = [model]
-        if 'free' in model:
-            models_to_try = [
-                'nousresearch/hermes-3-llama-3.1-405b:free',
-                'meta-llama/llama-3.3-70b-instruct:free',
-                'nvidia/nemotron-3-super-120b-a12b:free',
-                'openai/gpt-oss-120b:free',
-                'arcee-ai/trinity-large-thinking:free',
-                'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-                'deepseek/deepseek-r1:free',
-                'deepseek/deepseek-chat:free',
-                'qwen/qwen3-next-80b-a3b-instruct:free',
-                'google/gemma-4-31b-it:free',
-                'deepseek/deepseek-v4-flash:free',
-                'openai/gpt-oss-20b:free',
-                'google/gemma-4-26b-a4b-it:free',
-                'nvidia/nemotron-3-nano-30b-a3b:free',
-            ]
-
-        for target_model in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": user_prompt
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": system_prompt
+                    }
+                ]
+            },
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": max_tokens
+            }
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        for attempt in range(3):
             try:
-                response = requests.post(
-                    OPENROUTER_URL,
-                    headers={
-                        'Content-Type': 'application/json',
-                        'Authorization': f'Bearer {self.api_key}',
-                        'HTTP-Referer': 'https://kolkata-ff-bot-7955.onrender.com',
-                        'X-Title': 'Kolkata FF AI Council'
-                    },
-                    json={
-                        'model': target_model,
-                        'messages': [
-                            {'role': 'system', 'content': system_prompt},
-                            {'role': 'user', 'content': user_prompt}
-                        ],
-                        'max_tokens': max_tokens,
-                        'temperature': 0.7
-                    },
-                    timeout=30
-                )
-
+                response = requests.post(url, headers=headers, json=payload, timeout=30)
                 if response.status_code == 200:
                     data = response.json()
-                    return data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    return data['candidates'][0]['content']['parts'][0]['text']
+                elif response.status_code in [429, 503]:
+                    print(f"[COUNCIL] Gemini API returned {response.status_code}. Retrying in {attempt*2 + 2}s...")
+                    time.sleep(attempt * 2 + 2)
                 else:
-                    print(f"[COUNCIL] {target_model} failed ({response.status_code}). Trying fallback...")
+                    print(f"[COUNCIL] Gemini API failed with status code {response.status_code}: {response.text}")
+                    break
             except Exception as e:
-                print(f"[COUNCIL] Error calling {target_model}: {e}")
-        
+                print(f"[COUNCIL] Error calling Gemini API: {e}")
+                time.sleep(attempt * 2 + 2)
         return None
 
     def _build_data_prompt(self, prediction_data):
@@ -191,10 +184,10 @@ Stats:
         2. Chairman synthesizes the consensus
         Returns the full meeting result.
         """
-        if not self.api_key:
+        if not self.gemini_key:
             return {
                 'status': 'error',
-                'message': 'OPENROUTER_API_KEY not set. Set it in environment variables to enable AI Council.'
+                'message': 'GEMINI_API_KEY not set. Set it in environment variables to enable AI Council.'
             }
 
         data_prompt = self._build_data_prompt(prediction_data)
@@ -208,7 +201,7 @@ Stats:
                 model=member['model'],
                 system_prompt=member['style'],
                 user_prompt=data_prompt,
-                max_tokens=300
+                max_tokens=8000
             )
 
             if response:
@@ -239,7 +232,7 @@ Stats:
             model='openrouter/free',
             system_prompt='You are a senior decision maker. Always respond with valid JSON only.',
             user_prompt=chairman_prompt,
-            max_tokens=300
+            max_tokens=8000
         )
 
         # Parse chairman's JSON response
@@ -303,8 +296,8 @@ Stats:
         Hold a daily evolution meeting to tweak system weights based on performance.
         Returns updated config and reason.
         """
-        if not self.api_key:
-            return {"status": "error", "message": "No API Key for Evolution. Set OPENROUTER_API_KEY in Render Dashboard → Environment."}
+        if not self.gemini_key:
+            return {"status": "error", "message": "No API Key for Evolution. Set GEMINI_API_KEY in environment."}
 
         evolution_prompt = f"""You are the Chief AI Architect for the Kolkata FF bot.
 Your job is to optimize the system's prediction logic daily by tweaking algorithm weights.
@@ -338,7 +331,7 @@ IMPORTANT: Return ONLY the JSON, no markdown formatting."""
             model='openrouter/free',
             system_prompt='You are an elite machine learning engineer. Respond only with valid JSON.',
             user_prompt=evolution_prompt,
-            max_tokens=250
+            max_tokens=8000
         )
 
         if not response:

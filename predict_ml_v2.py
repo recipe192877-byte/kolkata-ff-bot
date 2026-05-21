@@ -702,6 +702,9 @@ def get_today_prediction_history(save_package, features, original_df):
     today_str = today_obj.strftime('%d/%m/%Y')
     
     today_features = features[features['Date'] == today_str].copy()
+    if today_features.empty and not features.empty:
+        fallback_date = features['Date'].iloc[-1]
+        today_features = features[features['Date'] == fallback_date].copy()
     history = []
     
     if not today_features.empty:

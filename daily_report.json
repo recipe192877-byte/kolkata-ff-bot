@@ -1,68 +1,68 @@
 {
-    "date_run": "17/05/2026 00:39:23",
-    "target_date": "16/05/2026",
+    "date_run": "22/05/2026 02:02:53",
+    "target_date": "21/05/2026",
     "yesterday_stats": {
-        "date": "16/05/2026",
+        "date": "21/05/2026",
         "total_bazis": 8,
-        "correct_predictions": 4,
-        "accuracy_pct": 50.0,
+        "correct_predictions": 5,
+        "accuracy_pct": 62.5,
         "details": [
             {
                 "bazi": 1,
                 "predicted_top_3": [
+                    5,
                     8,
-                    6,
-                    7
+                    2
                 ],
-                "actual": 7,
+                "actual": 5,
                 "status": "PASS"
             },
             {
                 "bazi": 2,
                 "predicted_top_3": [
-                    0,
-                    3,
+                    4,
+                    1,
                     9
                 ],
-                "actual": 0,
+                "actual": 1,
                 "status": "PASS"
             },
             {
                 "bazi": 3,
                 "predicted_top_3": [
-                    2,
+                    9,
                     6,
-                    1
+                    3
                 ],
-                "actual": 2,
+                "actual": 9,
                 "status": "PASS"
             },
             {
                 "bazi": 4,
                 "predicted_top_3": [
-                    0,
-                    9,
-                    7
+                    4,
+                    3,
+                    5
+                ],
+                "actual": 3,
+                "status": "PASS"
+            },
+            {
+                "bazi": 5,
+                "predicted_top_3": [
+                    8,
+                    4,
+                    1
                 ],
                 "actual": 3,
                 "status": "FAIL"
             },
             {
-                "bazi": 5,
-                "predicted_top_3": [
-                    0,
-                    9,
-                    6
-                ],
-                "actual": 8,
-                "status": "FAIL"
-            },
-            {
                 "bazi": 6,
                 "predicted_top_3": [
-                    6,
-                    3,
-                    0
+                    8,
+                    0,
+                    2
                 ],
                 "actual": 7,
                 "status": "FAIL"
@@ -70,27 +70,32 @@
             {
                 "bazi": 7,
                 "predicted_top_3": [
-                    9,
-                    2,
-                    0
+                    7,
+                    5,
+                    1
                 ],
-                "actual": 5,
-                "status": "FAIL"
+                "actual": 7,
+                "status": "PASS"
             },
             {
                 "bazi": 8,
                 "predicted_top_3": [
+                    0,
                     5,
-                    6,
-                    4
+                    8
                 ],
-                "actual": 5,
-                "status": "PASS"
+                "actual": 1,
+                "status": "FAIL"
             }
         ]
     },
     "evolution_result": {
-        "status": "pending",
-        "message": "AI Evolution pending for tonight. API Key is now active and ready."
+        "status": "success",
+        "config": {
+            "ml_weight": 0.45,
+            "memory_weight": 0.3,
+            "freq_weight": 0.25
+        },
+        "reason": "Increased the weight of the Vector Memory model to better capture and leverage repetitive short-term patterns that might have been missed, aiming for improved prediction accuracy."
     }
 }

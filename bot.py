@@ -24,7 +24,7 @@ def start_bot():
     print(" 4-Model Ensemble | Vector Memory | Auto-Healer   ")
     print("==================================================")
     print(f" Brain Capacity: {predict_ml.brain.get_brain_capacity()} patterns")
-    print(f" Healer Status:  {'ONLINE' if os.environ.get('OPENROUTER_API_KEY') else 'NO API KEY (set OPENROUTER_API_KEY)'}")
+    print(f" Healer Status:  {'ONLINE' if os.environ.get('GEMINI_API_KEY') else 'NO API KEY (set GEMINI_API_KEY)'}")
     print("==================================================")
     
     last_record_count = 0

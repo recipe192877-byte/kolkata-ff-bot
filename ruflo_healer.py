@@ -67,10 +67,11 @@ class RuFloHealer:
     """
     def __init__(self):
         self.api_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
+        self.gemini_key = os.environ.get('GEMINI_API_KEY', 'AIzaSyCwb5cLbFWnaZqh4Uzkow2L6ZCO4RDzFtg').strip()
         
     def scan_and_upgrade(self):
-        if not self.api_key:
-            print("[RUFLO_HEALER] OPENROUTER_API_KEY not found. Skipping autonomous upgrade.")
+        if not self.gemini_key:
+            print("[RUFLO_HEALER] GEMINI_API_KEY not found. Skipping autonomous upgrade.")
             return
 
         print("\n" + "="*50)
@@ -124,46 +125,61 @@ Your task:
 Here is the code:
 {original_code}
 """
-        try:
-            for model in FREE_MODELS:
-                print(f"[RUFLO_HEALER] Attempting upgrade with model: {model}")
-                response = requests.post(
-                    OPENROUTER_URL,
-                    headers={
-                        'Content-Type': 'application/json',
-                        'Authorization': f'Bearer {self.api_key}',
-                        'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
-                        'X-Title': 'Kolkata FF Autonomous Upgrader'
-                    },
-                    json={
-                        'model': model,
-                        'messages': [
-                            {'role': 'system', 'content': 'You are RuFlo, a master autonomous coding agent. Return ONLY raw, perfectly valid Python code. No markdown formatting.'},
-                            {'role': 'user', 'content': prompt}
-                        ],
-                        'max_tokens': 8000 
-                    },
-                    timeout=120
-                )
-
+        if not self.gemini_key:
+            return None
+            
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are RuFlo, a master autonomous coding agent. Return ONLY raw, perfectly valid Python code. No markdown formatting."
+                    }
+                ]
+            },
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 8000
+            }
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        for attempt in range(3):
+            try:
+                print(f"[RUFLO_HEALER] Attempting upgrade with direct Gemini API (attempt {attempt+1})...")
+                response = requests.post(url, headers=headers, json=payload, timeout=120)
                 if response.status_code == 200:
                     data = response.json()
-                    new_code = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    new_code = data['candidates'][0]['content']['parts'][0]['text']
                     new_code = new_code.replace("```python", "").replace("```", "").strip()
                     if len(new_code) > 100: 
                         return new_code
+                elif response.status_code in [429, 503]:
+                    print(f"[RUFLO_HEALER] Gemini API returned {response.status_code}. Retrying in {attempt*2 + 2}s...")
+                    time.sleep(attempt * 2 + 2)
                 else:
-                    print(f"Model {model} failed. Trying next...")
-            
-            return None
-        except Exception as e:
-            print(f"[RUFLO_HEALER] AI call failed: {str(e)}")
-            return None
+                    print(f"Gemini API failed. Status code: {response.status_code}")
+                    break
+            except Exception as e:
+                print(f"[RUFLO_HEALER] AI call failed: {str(e)}")
+                time.sleep(attempt * 2 + 2)
+        return None
 
     def chat_and_execute(self, user_message):
         """Interactive chat with the user. Can answer questions or execute code changes."""
-        if not self.api_key:
-            return {"reply": "Error: OPENROUTER_API_KEY is not set. I cannot function.", "modifications": []}
+        if not self.gemini_key:
+            return {"reply": "Error: GEMINI_API_KEY is not set. I cannot function.", "modifications": []}
 
         print(f"\n[RUFLO_CHAT] Received command: {user_message}")
         
@@ -202,31 +218,42 @@ You MUST respond EXACTLY in this JSON format (no markdown blocks, just raw JSON)
 If no modifications are needed, leave the "modifications" array empty.
 IMPORTANT: If you modify a file, you MUST provide the ENTIRE file's code, not just snippets.
 """
-        try:
-            for model in FREE_MODELS:
-                print(f"[RUFLO_CHAT] Attempting chat with model: {model}")
-                response = requests.post(
-                    OPENROUTER_URL,
-                    headers={
-                        'Content-Type': 'application/json',
-                        'Authorization': f'Bearer {self.api_key}',
-                        'HTTP-Referer': 'https://kolkata-ff-bot.onrender.com',
-                        'X-Title': 'Kolkata FF Autonomous Upgrader'
-                    },
-                    json={
-                        'model': model,
-                        'messages': [
-                            {'role': 'system', 'content': 'You are RuFlo, a master autonomous coding agent. Return ONLY raw, valid JSON.'},
-                            {'role': 'user', 'content': prompt}
-                        ],
-                        'max_tokens': 15000 
-                    },
-                    timeout=120
-                )
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_key}"
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        }
+                    ]
+                }
+            ],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are RuFlo, a master autonomous coding agent. Return ONLY raw, valid JSON."
+                    }
+                ]
+            },
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "temperature": 0.2,
+                "maxOutputTokens": 8000
+            }
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        for attempt in range(3):
+            try:
+                print(f"[RUFLO_CHAT] Attempting chat with direct Gemini API (attempt {attempt+1})...")
+                response = requests.post(url, headers=headers, json=payload, timeout=120)
 
                 if response.status_code == 200:
                     data = response.json()
-                    content = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+                    content = data['candidates'][0]['content']['parts'][0]['text']
                     content = content.replace("```json", "").replace("```", "").strip()
                     try:
                         result = json.loads(content)
@@ -248,13 +275,18 @@ IMPORTANT: If you modify a file, you MUST provide the ENTIRE file's code, not ju
                         
                         return result
                     except json.JSONDecodeError:
-                        continue # Try next model if JSON is bad
+                        print("[RUFLO_CHAT] Error parsing JSON from response.")
+                elif response.status_code in [429, 503]:
+                    print(f"[RUFLO_CHAT] Gemini API returned {response.status_code}. Retrying in {attempt*2 + 2}s...")
+                    time.sleep(attempt * 2 + 2)
                 else:
-                    print(f"Model {model} failed. Trying next...")
+                    print(f"Gemini API failed. Status code: {response.status_code}")
+                    break
+            except Exception as e:
+                print(f"Error during API call: {e}")
+                time.sleep(attempt * 2 + 2)
 
-            return {"reply": "Error: All free AI models failed to respond. Please check your internet or recharge credits.", "modifications": []}
-        except Exception as e:
-            return {"reply": f"Error contacting RuFlo API: {str(e)}", "modifications": []}
+        return {"reply": "Error: Gemini AI model failed to respond.", "modifications": []}
 
 if __name__ == "__main__":
     healer = RuFloHealer()
