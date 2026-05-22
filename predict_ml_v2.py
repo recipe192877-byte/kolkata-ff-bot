@@ -728,8 +728,13 @@ def get_today_prediction_history(save_package, features, original_df):
             actual = int(row['Target_Single'])
             day_of_week = row['Date_Obj'].dayofweek
             
-            # Get recent singles for vector memory
-            recent_s_hist = original_df['Single'].tail(5).values.tolist() if len(original_df) >= 5 else None
+            # Get recent singles for vector memory (using 5 singles preceding this specific Bazi)
+            idx_pos = features.index.get_loc(idx)
+            if idx_pos >= 5:
+                recent_s_hist = features.iloc[idx_pos-5:idx_pos]['Target_Single'].values.tolist()
+            else:
+                recent_s_hist = None
+                
             blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi_num, day_of_week, recent_singles=recent_s_hist)
             
             sorted_indices = blended_probs.argsort()[::-1][:3]
