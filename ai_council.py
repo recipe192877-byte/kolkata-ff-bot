@@ -113,7 +113,7 @@ class AICouncil:
             }
             try:
                 print(f"[COUNCIL] Trying direct Gemini API...")
-                response = requests.post(url, headers=headers, json=payload, timeout=30)
+                response = requests.post(url, headers=headers, json=payload, timeout=15)
                 if response.status_code == 200:
                     data = response.json()
                     return data['candidates'][0]['content']['parts'][0]['text']
@@ -160,27 +160,24 @@ class AICouncil:
                     "max_tokens": max_tokens
                 }
                 
-                for attempt in range(2):
-                    try:
-                        print(f"[COUNCIL] Trying OpenRouter model: {model_name} (attempt {attempt+1})...")
-                        response = requests.post(url, headers=headers, json=payload, timeout=45)
-                        if response.status_code == 200:
-                            data = response.json()
-                            if 'choices' in data and len(data['choices']) > 0:
-                                msg = data['choices'][0]['message']
-                                content = msg.get('content')
-                                if not content and msg.get('reasoning'):
-                                    content = msg.get('reasoning')
-                                if content:
-                                    print(f"[COUNCIL] OpenRouter Success with {model_name}!")
-                                    return content
-                            print(f"[COUNCIL] OpenRouter response missing content for {model_name}: {data}")
-                        else:
-                            print(f"[COUNCIL] OpenRouter attempt failed for {model_name}: {response.status_code} - {response.text[:200]}")
-                            time.sleep(attempt * 2 + 1)
-                    except Exception as e:
-                        print(f"[COUNCIL] OpenRouter exception for {model_name} on attempt {attempt+1}: {e}")
-                        time.sleep(attempt * 2 + 1)
+                try:
+                    print(f"[COUNCIL] Trying OpenRouter model: {model_name}...")
+                    response = requests.post(url, headers=headers, json=payload, timeout=15)
+                    if response.status_code == 200:
+                        data = response.json()
+                        if 'choices' in data and len(data['choices']) > 0:
+                            msg = data['choices'][0]['message']
+                            content = msg.get('content')
+                            if not content and msg.get('reasoning'):
+                                content = msg.get('reasoning')
+                            if content:
+                                print(f"[COUNCIL] OpenRouter Success with {model_name}!")
+                                return content
+                        print(f"[COUNCIL] OpenRouter response missing content for {model_name}: {data}")
+                    else:
+                        print(f"[COUNCIL] OpenRouter failed for {model_name}: {response.status_code} - {response.text[:200]}")
+                except Exception as e:
+                    print(f"[COUNCIL] OpenRouter exception for {model_name}: {e}")
         
         return None
 
