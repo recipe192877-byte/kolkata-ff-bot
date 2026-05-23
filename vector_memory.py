@@ -24,7 +24,7 @@ class KolkataVectorMemory:
 
     def load_brain(self):
         """Load persistent memory from disk."""
-        if os.path.exists(self.db_path):
+        if self.db_path and os.path.exists(self.db_path):
             try:
                 with open(self.db_path, 'r') as f:
                     self.memory_bank = json.load(f)
@@ -34,10 +34,15 @@ class KolkataVectorMemory:
                 self.memory_bank = []
         else:
             self.memory_bank = []
-            print(f"[BRAIN] No existing brain found. Starting fresh.")
+            if self.db_path:
+                print(f"[BRAIN] No existing brain found. Starting fresh.")
+            else:
+                print(f"[BRAIN] Running with in-memory temporary brain.")
 
     def save_brain(self):
         """Save persistent memory to disk."""
+        if not self.db_path:
+            return
         try:
             with open(self.db_path, 'w') as f:
                 json.dump(self.memory_bank, f)

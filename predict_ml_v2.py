@@ -291,24 +291,32 @@ def build_frequency_model(df):
     """Build a frequency-based model that captures number distribution biases."""
     freq_model = {}
     
+    # Check column name (original_df uses 'Single', features/train_df uses 'Target_Single')
+    single_col = 'Single' if 'Single' in df.columns else 'Target_Single'
+    
     # Overall frequency
-    overall_counts = df['Single'].value_counts(normalize=True)
+    overall_counts = df[single_col].value_counts(normalize=True)
     freq_model['overall'] = {d: overall_counts.get(d, 0.1) for d in range(10)}
     
     # Bazi-specific frequency
     for bazi in range(1, 9):
         bazi_data = df[df['Bazi'] == bazi]
         if len(bazi_data) > 10:
-            bazi_counts = bazi_data['Single'].value_counts(normalize=True)
+            bazi_counts = bazi_data[single_col].value_counts(normalize=True)
             freq_model[f'bazi_{bazi}'] = {d: bazi_counts.get(d, 0.1) for d in range(10)}
         else:
             freq_model[f'bazi_{bazi}'] = freq_model['overall']
     
     # Day-specific frequency
     for day in range(7):
-        day_data = df[df['Date_Obj'].dt.dayofweek == day]
+        # Handle Date_Obj or fallback to parsing 'Date'
+        if 'Date_Obj' in df.columns:
+            day_data = df[df['Date_Obj'].dt.dayofweek == day]
+        else:
+            day_data = df[pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce').dt.dayofweek == day]
+            
         if len(day_data) > 20:
-            day_counts = day_data['Single'].value_counts(normalize=True)
+            day_counts = day_data[single_col].value_counts(normalize=True)
             freq_model[f'day_{day}'] = {d: day_counts.get(d, 0.1) for d in range(10)}
         else:
             freq_model[f'day_{day}'] = freq_model['overall']
@@ -320,51 +328,91 @@ def build_frequency_model(df):
 # ============================================================
 
 def generate_oos_stats(features):
-    """True Out-of-Sample validation using TimeSeriesSplit."""
-    features = features.sort_values(by=['Date_Obj', 'Bazi'])
+    """True Out-of-Sample validation with full blending and learning simulation."""
+    features = features.sort_values(by=['Date_Obj', 'Bazi']).reset_index(drop=True)
     unique_dates = features['Date_Obj'].dt.date.unique()
     
-    if len(unique_dates) < 20: 
-        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
+    if len(unique_dates) < 10: 
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0, "daily_accuracy": []}
     
     X_cols = get_feature_columns()
     
-    # Use last 21 days as test, rest as train (proper temporal split)
-    last_21_dates = unique_dates[-21:]
-    cutoff_date = last_21_dates[0]
+    # Use last 30 days (or 50% of dates if less than 30) as test
+    test_days = 30
+    if len(unique_dates) < test_days:
+        test_days = max(2, len(unique_dates) // 2)
+    
+    last_n_dates = unique_dates[-test_days:]
+    cutoff_date = last_n_dates[0]
     
     train_df = features[features['Date_Obj'].dt.date < cutoff_date]
     test_df = features[features['Date_Obj'].dt.date >= cutoff_date]
     
+    if train_df.empty or test_df.empty:
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0, "daily_accuracy": []}
+        
     X_train = train_df[X_cols]
     y_train = train_df['Target_Single']
-    X_test = test_df[X_cols]
-    y_test = test_df['Target_Single']
     
-    # Train individual models (no stacking during validation — avoids data leakage)
+    # Train OOS ensemble models
     models = create_ensemble_models()
-    all_probs = []
-    
+    trained_models = {}
     for name, model in models.items():
         model.fit(X_train, y_train)
-        probs = model.predict_proba(X_test)
-        # Ensure all classes 0-9 are represented
-        full_probs = np.zeros((len(X_test), 10))
+        trained_models[name] = model
+        
+    # Build frequency model on train_df
+    freq_model = build_frequency_model(train_df)
+    
+    # Initialize walk-forward brain with train_df data
+    val_brain = KolkataVectorMemory(context_size=5, db_path=None)
+    for idx in range(len(train_df)):
+        row = train_df.iloc[idx]
+        b_bazi = int(row['Bazi'])
+        b_actual = int(row['Target_Single'])
+        if idx >= 5:
+            b_recent = train_df.iloc[idx-5:idx]['Target_Single'].values.tolist()
+            val_brain.remember(b_recent, b_actual, b_bazi)
+            
+    # Predict test_df sequentially
+    matches_list = []
+    y_test = test_df['Target_Single'].values
+    
+    # Predict probabilities for test set
+    all_probs = []
+    for name, model in trained_models.items():
+        probs = model.predict_proba(test_df[X_cols])
+        full_probs = np.zeros((len(test_df), 10))
         for i, cls in enumerate(model.classes_):
             full_probs[:, int(cls)] = probs[:, i]
         all_probs.append(full_probs)
-    
-    # Average ensembling (simpler, less overfit than stacking)
+        
     ensemble_probs = np.mean(all_probs, axis=0)
     
-    is_match_list = []
-    for i, true_val in enumerate(y_test):
-        sorted_indices = ensemble_probs[i].argsort()[::-1][:3]
-        is_match_list.append(int(true_val) in sorted_indices)
-    
-    matches = np.array(is_match_list)
+    for i in range(len(test_df)):
+        row = test_df.iloc[i]
+        bazi = int(row['Bazi'])
+        day_of_week = row['Date_Obj'].dayofweek
+        
+        # Get recent singles (looking back at combined dataset)
+        idx_pos = features.index.get_loc(test_df.index[i])
+        if idx_pos >= 5:
+            recent_s = features.iloc[idx_pos-5:idx_pos]['Target_Single'].values.tolist()
+        else:
+            recent_s = None
+            
+        blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, recent_singles=recent_s, brain_obj=val_brain)
+        sorted_indices = blended_probs.argsort()[::-1][:3]
+        is_match = 1 if int(y_test[i]) in sorted_indices else 0
+        matches_list.append(is_match)
+        
+        # Update validation brain with actual outcome
+        if recent_s is not None and len(recent_s) >= 5:
+            val_brain.remember(recent_s, int(y_test[i]), bazi)
+            
+    # Calculate stats
     test_df_copy = test_df.copy()
-    test_df_copy['Matched'] = matches
+    test_df_copy['Matched'] = matches_list
     
     last_date = test_df_copy['Date'].iloc[-1]
     today_mask = test_df_copy['Date'] == last_date
@@ -377,19 +425,38 @@ def generate_oos_stats(features):
     week_matches_count = int(test_df_copy[week_mask]['Matched'].sum())
     week_total = int(week_mask.sum())
     
-    prev_correct = bool(matches[-1]) if len(matches) > 0 else False
+    prev_correct = bool(matches_list[-1]) if len(matches_list) > 0 else False
     
     win_streak = 0
-    for m in reversed(matches):
+    for m in reversed(matches_list):
         if m: win_streak += 1
         else: break
-    
+        
     lose_streak = 0
-    for m in reversed(matches):
+    for m in reversed(matches_list):
         if not m: lose_streak += 1
         else: break
-    
-    overall_accuracy = float(matches.mean() * 100)
+        
+    # Group by Date and calculate daily accuracy
+    unique_dates_in_test = []
+    for d in test_df_copy['Date']:
+        if d not in unique_dates_in_test:
+            unique_dates_in_test.append(d)
+            
+    daily_accuracy = []
+    for d in unique_dates_in_test:
+        day_mask = test_df_copy['Date'] == d
+        day_matches = int(test_df_copy[day_mask]['Matched'].sum())
+        day_total = int(day_mask.sum())
+        pct = round((day_matches / day_total) * 100, 1) if day_total > 0 else 0.0
+        daily_accuracy.append({
+            "date": d,
+            "accuracy_pct": pct,
+            "correct": day_matches,
+            "total": day_total
+        })
+        
+    overall_accuracy = float(np.mean(matches_list) * 100) if len(matches_list) > 0 else 0.0
     
     stats = {
         "today_matches": f"{today_matches_count}/{today_total}",
@@ -397,13 +464,14 @@ def generate_oos_stats(features):
         "prev_correct": prev_correct,
         "winning_streak": int(win_streak),
         "losing_streak": int(lose_streak),
-        "oos_accuracy_pct": round(overall_accuracy, 1)
+        "oos_accuracy_pct": round(overall_accuracy, 1),
+        "daily_accuracy": daily_accuracy
     }
     
     with open(STATS_FILE, 'w') as f:
         json.dump(stats, f)
-    
-    print(f"OOS Validation: {overall_accuracy:.1f}% top-3 accuracy over {len(matches)} predictions (random baseline: 30%)")
+        
+    print(f"OOS Blended Validation: {overall_accuracy:.1f}% top-3 accuracy over {len(matches_list)} predictions")
     return stats
 
 def train_and_save_model():
@@ -441,6 +509,20 @@ def train_and_save_model():
     
     joblib.dump(save_package, MODEL_FILE)
     print(f"V3 Deep Ensemble (XGB+LGB+RF+GB + Freq) trained on {len(X)} records and saved successfully.")
+    
+    # Clear and rebuild persistent brain sequentially from scratch to prevent any future leakage/corruption
+    print("Rebuilding persistent brain memory bank sequentially...")
+    brain.memory_bank = []
+    for idx in range(len(features)):
+        row = features.iloc[idx]
+        bazi = int(row['Bazi'])
+        actual = int(row['Target_Single'])
+        if idx >= 5:
+            recent = features.iloc[idx-5:idx]['Target_Single'].values.tolist()
+            brain.remember(recent, actual, bazi)
+    brain.save_brain()
+    print(f"Persistent brain rebuilt successfully. Capacity: {brain.get_brain_capacity()} patterns.")
+    
     return True
 
 # ============================================================
@@ -451,7 +533,7 @@ def train_and_save_model():
 # with DEFAULT_AI_CONFIG fallback support. Do NOT redefine them here.
 
 
-def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=None):
+def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=None, brain_obj=None):
     """Blend Machine Learning probabilities with Frequency model and Vector Memory."""
     
     # Load dynamic weights from config
@@ -485,9 +567,10 @@ def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=No
     freq_dist = freq_dist / freq_dist.sum()
     
     # Vector Memory prediction (AI Brain)
+    active_brain = brain_obj if brain_obj is not None else brain
     memory_dist = np.zeros(10)
-    if recent_singles and brain.get_brain_capacity() >= 5:
-        memory_boost = brain.get_prediction_boost(recent_singles, bazi)
+    if recent_singles and active_brain.get_brain_capacity() >= 5:
+        memory_boost = active_brain.get_prediction_boost(recent_singles, bazi)
         if memory_boost:
             memory_dist = np.array(memory_boost)
             memory_dist = memory_dist / (memory_dist.sum() + 1e-9)
@@ -510,126 +593,23 @@ def blend_predictions(ml_probs, freq_model, bazi, day_of_week, recent_singles=No
     return blended
 
 def backtest_recent_stats(save_package, features, today_str):
-    """Live computation of recent backtest stats using loaded models."""
-    X_cols = get_feature_columns()
-    
-    eval_features = features.tail(30 * 8).copy()
-    if eval_features.empty:
-        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
-    
-    try:
-        models = save_package['models']
-        freq_model = save_package.get('freq_model', {})
-        X_all = eval_features[X_cols]
-        y_all = eval_features['Target_Single'].values
-        
-        # Ensemble predict
-        all_probs = []
-        for name, model in models.items():
-            probs = model.predict_proba(X_all)
-            full_probs = np.zeros((len(X_all), 10))
-            for i, cls in enumerate(model.classes_):
-                full_probs[:, int(cls)] = probs[:, i]
-            all_probs.append(full_probs)
-        
-        ensemble_probs = np.mean(all_probs, axis=0)
-        
-        matches_list = []
-        for i in range(len(ensemble_probs)):
-            bazi = int(eval_features.iloc[i]['Bazi'])
-            day_of_week = eval_features.iloc[i]['Date_Obj'].dayofweek
-            
-            # Get recent singles for vector memory
-            idx_pos = eval_features.index.get_loc(eval_features.index[i])
-            if idx_pos >= 5:
-                recent_s = eval_features.iloc[max(0, idx_pos-5):idx_pos]['Target_Single'].values.tolist()
-            else:
-                recent_s = None
-            
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi, day_of_week, recent_singles=recent_s)
-            
-            sorted_indices = blended_probs.argsort()[::-1][:3]
-            is_match = 1 if int(y_all[i]) in sorted_indices else 0
-            matches_list.append(is_match)
-            
-            # Teach the brain the actual outcome
-            if recent_s is not None and len(recent_s) >= 5:
-                brain.remember(recent_s, int(y_all[i]), bazi)
-        
-        matches_series = pd.Series(matches_list, index=eval_features.index)
-        
-        today_mask = (eval_features['Date'] == today_str)
-        today_total = today_mask.sum()
-        
-        if today_total > 0:
-            today_matches_count = matches_series[today_mask].sum()
-        else:
-            last_date = eval_features['Date'].iloc[-1]
-            today_mask = (eval_features['Date'] == last_date)
-            today_matches_count = matches_series[today_mask].sum()
-            today_total = today_mask.sum()
-        
-        unique_dates = eval_features['Date'].unique()
-        last_7_dates = unique_dates[-7:] if len(unique_dates) >= 7 else unique_dates
-        week_mask = eval_features['Date'].isin(last_7_dates)
-        week_matches_count = matches_series[week_mask].sum()
-        week_total = week_mask.sum()
-        
-        prev_correct = bool(matches_list[-1]) if len(matches_list) > 0 else False
-        
-        win_streak = 0
-        for m in reversed(matches_list):
-            if m: win_streak += 1
-            else: break
-        
-        lose_streak = 0
-        for m in reversed(matches_list):
-            if not m: lose_streak += 1
-            else: break
-            
-        # Group by Date and calculate daily accuracy
-        eval_features['Matched'] = matches_list
-        unique_dates = []
-        for d in eval_features['Date']:
-            if d not in unique_dates:
-                unique_dates.append(d)
-        
-        daily_accuracy = []
-        for d in unique_dates:
-            day_mask = eval_features['Date'] == d
-            day_matches = int(eval_features[day_mask]['Matched'].sum())
-            day_total = int(day_mask.sum())
-            pct = round((day_matches / day_total) * 100, 1) if day_total > 0 else 0.0
-            daily_accuracy.append({
-                "date": d,
-                "accuracy_pct": pct,
-                "correct": day_matches,
-                "total": day_total
-            })
-            
-        oos_accuracy_pct = round(np.mean(matches_list) * 100, 1) if len(matches_list) > 0 else 0.0
-        
-        return {
-            "today_matches": f"{int(today_matches_count)}/{int(today_total)}",
-            "week_matches": f"{int(week_matches_count)}/{int(week_total)}",
-            "prev_correct": prev_correct,
-            "winning_streak": int(win_streak),
-            "losing_streak": int(lose_streak),
-            "oos_accuracy_pct": oos_accuracy_pct,
-            "daily_accuracy": daily_accuracy
-        }
-    except Exception as e:
-        print(f"Error in backtest_recent_stats: {e}")
-        if os.path.exists(STATS_FILE):
-            try:
-                with open(STATS_FILE, 'r') as f:
-                    data = json.load(f)
-                    if 'daily_accuracy' not in data:
-                        data['daily_accuracy'] = []
-                    return data
-            except Exception:
-                pass
-        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0, "daily_accuracy": []}
+    """Load pre-computed stats from file."""
+    if os.path.exists(STATS_FILE):
+        try:
+            with open(STATS_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    # Fallback if file doesn't exist
+    return {
+        "today_matches": "0/0",
+        "week_matches": "0/0",
+        "prev_correct": False,
+        "winning_streak": 0,
+        "losing_streak": 0,
+        "oos_accuracy_pct": 0.0,
+        "daily_accuracy": []
+    }
 
 def get_yesterday_stats():
     """Calculate the exact predictions vs actuals for yesterday to feed the AI Council."""
@@ -725,58 +705,117 @@ def get_patti_suggestions(original_df, target_single):
     top_pattis = patti_counts.head(3).index.tolist()
     return [str(p) for p in top_pattis if pd.notna(p)]
 
+PREDICTIONS_STORE_FILE = 'predictions_store.json'
+
+def load_predictions_store():
+    if os.path.exists(PREDICTIONS_STORE_FILE):
+        try:
+            with open(PREDICTIONS_STORE_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_predictions_store(store):
+    try:
+        with open(PREDICTIONS_STORE_FILE, 'w') as f:
+            json.dump(store, f, indent=4)
+    except Exception as e:
+        print(f"[STORE] Error saving predictions store: {e}")
+
+def calculate_fallback_prediction(save_package, features, original_df, date_str, bazi_num):
+    # Find the feature row
+    row_features = features[(features['Date'] == date_str) & (features['Bazi'] == bazi_num)]
+    if row_features.empty:
+        return None
+        
+    X_cols = get_feature_columns()
+    X_query = row_features[X_cols]
+    
+    models = save_package['models']
+    freq_model = save_package.get('freq_model', {})
+    
+    all_probs = []
+    for name, model in models.items():
+        try:
+            probs = model.predict_proba(X_query)[0]
+            full_probs = np.zeros(10)
+            for i, cls in enumerate(model.classes_):
+                full_probs[int(cls)] = probs[i]
+            all_probs.append(full_probs)
+        except Exception:
+            pass
+            
+    if not all_probs:
+        return None
+        
+    ml_probs = np.mean(all_probs, axis=0)
+    
+    # Get recent singles preceding this bazi
+    idx_pos = features.index.get_loc(row_features.index[0])
+    if idx_pos >= 5:
+        recent_s = features.iloc[idx_pos-5:idx_pos]['Target_Single'].values.tolist()
+    else:
+        recent_s = None
+        
+    day_of_week = row_features.iloc[0]['Date_Obj'].dayofweek
+    
+    blended_probs = blend_predictions(ml_probs, freq_model, bazi_num, day_of_week, recent_singles=recent_s)
+    sorted_indices = blended_probs.argsort()[::-1]
+    return [int(sorted_indices[i]) for i in range(3)]
+
 def get_today_prediction_history(save_package, features, original_df):
     today_obj = datetime.now(timezone(timedelta(hours=5, minutes=30)))
     today_str = today_obj.strftime('%d/%m/%Y')
     
-    today_features = features[features['Date'] == today_str].copy()
-    if today_features.empty and not features.empty:
-        fallback_date = features['Date'].iloc[-1]
-        today_features = features[features['Date'] == fallback_date].copy()
-    history = []
+    today_data = original_df[original_df['Date'] == today_str]
+    if today_data.empty and not original_df.empty:
+        fallback_date = original_df['Date'].iloc[-1]
+        today_data = original_df[original_df['Date'] == fallback_date]
+        target_date_str = fallback_date
+    else:
+        target_date_str = today_str
+        
+    store = load_predictions_store()
+    date_store = store.get(target_date_str, {})
     
-    if not today_features.empty:
-        X_cols = get_feature_columns()
-        X_today = today_features[X_cols]
+    history = []
+    completed_bazis = {}
+    for idx, row in today_data.iterrows():
+        bazi_num = int(row['Bazi'])
+        actual = int(row['Single'])
+        completed_bazis[bazi_num] = actual
         
-        models = save_package['models']
-        freq_model = save_package.get('freq_model', {})
-        all_probs = []
-        for name, model in models.items():
-            probs = model.predict_proba(X_today)
-            full_probs = np.zeros((len(X_today), 10))
-            for i, cls in enumerate(model.classes_):
-                full_probs[:, int(cls)] = probs[:, i]
-            all_probs.append(full_probs)
+    for bazi_num in range(1, 9):
+        actual = completed_bazis.get(bazi_num, None)
+        pred_nums = date_store.get(str(bazi_num), None)
         
-        ensemble_probs = np.mean(all_probs, axis=0)
-        
-        for i, (idx, row) in enumerate(today_features.iterrows()):
-            bazi_num = int(row['Bazi'])
-            actual = int(row['Target_Single'])
-            day_of_week = row['Date_Obj'].dayofweek
+        if pred_nums is None:
+            is_completed = actual is not None
+            last_completed_bazi = max(completed_bazis.keys()) if completed_bazis else 0
+            is_next_pending = (bazi_num == last_completed_bazi + 1)
             
-            # Get recent singles for vector memory (using 5 singles preceding this specific Bazi)
-            idx_pos = features.index.get_loc(idx)
-            if idx_pos >= 5:
-                recent_s_hist = features.iloc[idx_pos-5:idx_pos]['Target_Single'].values.tolist()
+            if is_completed or is_next_pending:
+                pred_nums = calculate_fallback_prediction(save_package, features, original_df, target_date_str, bazi_num)
+                if pred_nums:
+                    if target_date_str not in store:
+                        store[target_date_str] = {}
+                    store[target_date_str][str(bazi_num)] = pred_nums
+                    save_predictions_store(store)
+            
+        if pred_nums is not None:
+            if actual is not None:
+                status = "Pass" if actual in pred_nums else "Fail"
             else:
-                recent_s_hist = None
+                status = "Pending"
                 
-            blended_probs = blend_predictions(ensemble_probs[i], freq_model, bazi_num, day_of_week, recent_singles=recent_s_hist)
-            
-            sorted_indices = blended_probs.argsort()[::-1][:3]
-            top_3 = [int(k) for k in sorted_indices]
-            
-            status = "Pass" if actual in top_3 else "Fail"
-            
             history.append({
                 "bazi": bazi_num,
-                "predictions": top_3,
-                "actual": actual,
+                "predictions": pred_nums,
+                "actual": actual if actual is not None else 0,
                 "status": status
             })
-    
+            
     history.sort(key=lambda x: x['bazi'], reverse=True)
     return history
 
@@ -922,7 +961,17 @@ def get_quick_prediction():
     sorted_indices = blended_probs.argsort()[::-1]
     top_3 = [(int(sorted_indices[i]), float(blended_probs[sorted_indices[i]])) for i in range(3)]
     top_prob = top_3[0][1] * 100
+    top_3_nums = [t[0] for t in top_3]
     
+    # Save the prediction for the pending next_bazi to store
+    if next_bazi <= 8:
+        store = load_predictions_store()
+        if today_str not in store:
+            store[today_str] = {}
+        if str(next_bazi) not in store[today_str]:
+            store[today_str][str(next_bazi)] = top_3_nums
+            save_predictions_store(store)
+            
     patti_suggestions = [get_patti_suggestions(original_df, t[0]) for t in top_3]
     
     stats = backtest_recent_stats(save_package, features, today_str)
@@ -963,6 +1012,24 @@ def get_quick_prediction():
     history_trend = [{"Bazi": int(x['Bazi']), "Single": int(x['Single'])} for x in history_trend]
     
     today_history = get_today_prediction_history(save_package, features, original_df)
+    
+    # Dynamically compute today's accuracy from the predictions store
+    today_total = 0
+    today_correct = 0
+    for item in today_history:
+        if item['status'] != 'Pending':
+            today_total += 1
+            if item['status'] == 'Pass':
+                today_correct += 1
+    stats['today_matches'] = f"{today_correct}/{today_total}"
+    
+    # Dynamically compute weekly accuracy from daily_accuracy list
+    daily_list = stats.get('daily_accuracy', [])
+    if daily_list:
+        last_7_days = daily_list[-7:]
+        week_correct = sum(day['correct'] for day in last_7_days)
+        week_total = sum(day['total'] for day in last_7_days)
+        stats['week_matches'] = f"{week_correct}/{week_total}"
     
     return {
         "status": "success",

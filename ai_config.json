@@ -1,5 +1,5 @@
 {
-    "ml_weight": 0.45,
-    "memory_weight": 0.3,
-    "freq_weight": 0.25
+    "ml_weight": 0.47,
+    "memory_weight": 0.25,
+    "freq_weight": 0.28
 }
