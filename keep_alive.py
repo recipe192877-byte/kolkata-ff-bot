@@ -19,7 +19,7 @@ _scrape_lock = Lock()  # Thread-safe lock to prevent concurrent scrapes
 
 # ── Response Cache (bounded) ──
 _cache = {}
-CACHE_TTL = 60  # seconds
+CACHE_TTL = 300  # seconds (5 minutes — reduces redundant ML recalculations)
 CACHE_MAX_SIZE = 10  # max entries
 
 

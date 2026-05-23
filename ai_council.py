@@ -18,23 +18,24 @@ OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 IST = timezone(timedelta(hours=5, minutes=30))
 
 # Council Members — each AI model has a unique "personality" and analysis style
+# Each member uses a different reliable free model for diverse perspectives
 COUNCIL_MEMBERS = [
     {
         'name': 'StatBot',
         'role': 'Statistical Analyst',
-        'model': 'openrouter/free',
+        'model': 'google/gemini-2.0-flash-exp:free',
         'style': 'You are StatBot, a pure statistics expert. Analyze ONLY mathematical patterns like frequency, gaps, and probability distributions. Give your top 3 number predictions with statistical reasoning.'
     },
     {
         'name': 'PatternAI',
         'role': 'Pattern Recognition Expert',
-        'model': 'openrouter/free',
+        'model': 'meta-llama/llama-3.3-70b-instruct:free',
         'style': 'You are PatternAI, a pattern recognition specialist. Focus ONLY on sequential patterns, streaks, repetitions, and cyclical trends in the data. Give your top 3 number predictions based on pattern analysis.'
     },
     {
         'name': 'RiskGuard',
         'role': 'Risk Assessment Officer',
-        'model': 'openrouter/free',
+        'model': 'qwen/qwen-2.5-72b-instruct:free',
         'style': 'You are RiskGuard, a risk management expert. Analyze the volatility, streaks, and confidence levels. Rate the overall risk (HIGH/MEDIUM/LOW) and suggest whether to play or skip. Also give your top 3 number predictions.'
     },
 ]

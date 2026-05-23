@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -684,7 +684,7 @@
             
             <!-- Daily AI Evolution Dashboard -->
             <div id="evolutionBox" class="chart-container" style="margin-top: 1.5rem; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.05);">
-                <div class="stat-label" style="text-align: center; margin-bottom: 0.8rem; color: #f59e0b;">🤖 DAILY AI EVOLUTION</div>
+                <div class="stat-label" style="text-align: center; margin-bottom: 0.8rem; color: #f59e0b;">ðŸ¤– DAILY AI EVOLUTION</div>
                 <div id="evoContent" style="display:none;">
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:8px; margin-bottom:8px;">
                         <span style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase;">Yesterday (<span id="evoDate">--</span>)</span>
@@ -953,7 +953,7 @@
                             // Top 3
                             for (let i = 0; i < 3; i++) {
                                 document.getElementById('num'+(i+1)).textContent = data.data.predictions[i].number;
-                                document.getElementById('patti'+(i+1)).textContent = data.data.predictions[i].pattis ? data.data.predictions[i].pattis.join(' • ') : '';
+                                document.getElementById('patti'+(i+1)).textContent = data.data.predictions[i].pattis ? data.data.predictions[i].pattis.join(' â€¢ ') : '';
                                 const pct = data.data.predictions[i].probability.toFixed(1);
                                 document.getElementById('pct'+(i+1)).textContent = pct+'%';
                                 document.getElementById('bar'+(i+1)).style.width = pct+'%';
@@ -1130,7 +1130,7 @@
                             domItem.innerHTML = `
                                 <div class="history-bazi">Bazi ${item.bazi}</div>
                                 <div class="history-preds">${pastPredHtml}</div>
-                                <div style="font-weight:900; font-size:1.1rem; color: ${item.status === 'Pass' ? 'var(--accent)' : 'var(--danger)'}; min-width:25px; text-align:center;">${item.actual}</div>
+                                <div style="font-weight:900; font-size:1.1rem; color: ${item.status === 'Pass' ? 'var(--accent)' : 'var(--danger)'}; min-width:25px; text-align:center;">${item.actual !== null && item.actual !== undefined ? item.actual : "--"}</div>
                                 <div class="history-status ${statusClass}">${item.status}</div>
                             `;
                             historyList.appendChild(domItem);
@@ -1160,26 +1160,26 @@
             if (!confirm('Retrain the AI model? This may take 30-60 seconds.')) return;
             const btn = document.getElementById('retrainBtn');
             btn.disabled = true;
-            btn.textContent = '⏳ Retraining...';
+            btn.textContent = 'â³ Retraining...';
             try {
                 const response = await fetch('/api/retrain');
                 const data = await response.json();
                 if (data.status === 'success') {
-                    btn.textContent = '✅ Retrained!';
+                    btn.textContent = 'âœ… Retrained!';
                     btn.style.borderColor = 'var(--accent)';
                     btn.style.color = 'var(--accent)';
                     setTimeout(() => triggerPrediction(), 1000);
                 } else {
-                    btn.textContent = '❌ ' + (data.message || 'Failed');
+                    btn.textContent = 'âŒ ' + (data.message || 'Failed');
                     btn.style.borderColor = 'var(--danger)';
                     btn.style.color = 'var(--danger)';
                 }
             } catch (err) {
-                btn.textContent = '❌ Network error';
+                btn.textContent = 'âŒ Network error';
             }
             setTimeout(() => {
                 btn.disabled = false;
-                btn.textContent = '🔄 RETRAIN';
+                btn.textContent = 'ðŸ”„ RETRAIN';
                 btn.style.borderColor = 'rgba(139, 92, 246, 0.4)';
                 btn.style.color = 'var(--secondary)';
             }, 5000);
@@ -1469,7 +1469,7 @@
     </style>
 
     <div class="ruflo-chat-btn" id="rufloChatBtn" onclick="toggleRuFloChat()">
-        💬
+        ðŸ’¬
     </div>
 
     <div class="ruflo-chat-window" id="rufloChatWindow">
@@ -1483,7 +1483,7 @@
         <div class="typing-indicator" id="rufloTyping">RuFlo is thinking and analyzing code...</div>
         <div class="ruflo-chat-input">
             <input type="text" id="rufloInput" placeholder="Command RuFlo..." onkeypress="if(event.key === 'Enter') sendRuFloMessage()">
-            <button onclick="sendRuFloMessage()">➤</button>
+            <button onclick="sendRuFloMessage()">âž¤</button>
         </div>
     </div>
 
@@ -1539,7 +1539,7 @@
                     if (data.files_modified && data.files_modified.length > 0) {
                         const modMsg = document.createElement('div');
                         modMsg.className = 'msg ai ai-mod';
-                        modMsg.innerHTML = `⚙️ <b>Files Overwritten & Pushed:</b><br>${data.files_modified.join(', ')}`;
+                        modMsg.innerHTML = `âš™ï¸ <b>Files Overwritten & Pushed:</b><br>${data.files_modified.join(', ')}`;
                         messagesDiv.appendChild(modMsg);
                     }
                 } else {
@@ -1563,3 +1563,4 @@
     </script>
 </body>
 </html>
+

@@ -62,14 +62,13 @@ def start_bot():
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Error reading data file to get current count: {e}")
                 current_count = 0 # Fallback to 0 if an error occurs during read
                 
-            if current_count > last_record_count: # Changed from "!= last_record_count" to handle potential data corruption/truncation, only retrain on new data
+            if current_count > last_record_count:
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] New data detected ({current_count} vs {last_record_count}). Retraining AI Model...")
                 safe_retrain()
                 last_record_count = current_count
-                
-                # Save brain after successful retrain cycle
-                predict_ml.brain.save_brain()
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Brain saved. Capacity: {predict_ml.brain.get_brain_capacity()} patterns")
+                # Brain is already rebuilt inside train_and_save_model() — no need to save again
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Retrain complete. Brain capacity: {predict_ml.brain.get_brain_capacity()} patterns")
+
             elif current_count < last_record_count:
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Data count decreased ({current_count} vs {last_record_count}). This shouldn't happen. Re-initializing last_record_count.")
                 last_record_count = current_count

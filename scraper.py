@@ -1,4 +1,4 @@
-import requests
+﻿import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import re
@@ -120,7 +120,7 @@ def scrape_kolkata_ff_in():
             has_bazi_header = False
             if len(rows) >= 2:
                 header_text = rows[1].get_text(strip=True).replace(' ', '').upper()
-                if '1234' in header_text or 'BAZI' in header_text or 'बाजि' in header_text: # Added Bengali "bazi"
+                if '1234' in header_text or 'BAZI' in header_text or 'à¤¬à¤¾à¤œà¤¿' in header_text: # Added Bengali "bazi"
                     has_bazi_header = True
             
             if has_bazi_header and len(rows) >= 4:
@@ -273,7 +273,7 @@ def scrape_kolkata_ff():
         df_new['Date'] = df_new['Date'].apply(lambda x: standardize_date(str(x)))
         df_new = df_new[df_new['Date'].str.match(r'^\d{2}/\d{2}/\d{4}$', na=False)] # Filter out invalid dates
         
-        # FIX #3: Better dedup — prefer records with both Patti AND Single (most complete)
+        # FIX #3: Better dedup â€” prefer records with both Patti AND Single (most complete)
         # Add completeness score: records with both patti+single rank higher
         df_new['_completeness'] = df_new.apply(
             lambda r: (2 if pd.notna(r.get('Patti')) and str(r.get('Patti', '')).strip() != '' else 0) +
@@ -283,6 +283,7 @@ def scrape_kolkata_ff():
         # Sort by completeness (highest first) so drop_duplicates keeps the best
         df_new = df_new.sort_values(['Date', 'Bazi', '_completeness', 'Source'], ascending=[True, True, False, False]) # Prefer .tv over .in if completeness is same
         df_new = df_new.drop_duplicates(subset=['Date', 'Bazi'], keep='first')
+        df_new = df_new.drop(columns=['Source'], errors='ignore')  # Remove Source col from final CSV
         df_new = df_new.drop(columns=['_completeness'], errors='ignore')
         
         csv_filename = 'kolkata_ff_history_advanced.csv'

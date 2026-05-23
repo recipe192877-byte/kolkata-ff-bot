@@ -3,3 +3,6 @@ __pycache__/
 *.pyo
 backtest_stats.json
 .env
+predictions_store.json
+*.joblib
+kolkata_brain.json

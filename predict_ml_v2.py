@@ -812,7 +812,7 @@ def get_today_prediction_history(save_package, features, original_df):
             history.append({
                 "bazi": bazi_num,
                 "predictions": pred_nums,
-                "actual": actual if actual is not None else 0,
+                "actual": actual,         # None for pending — frontend shows '--'
                 "status": status
             })
             

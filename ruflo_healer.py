@@ -63,12 +63,36 @@ FREE_MODELS = [
 class RuFloHealer:
     """
     Autonomous code upgrader. Reads source files, asks RuFlo AI to improve them,
-    overwrites the local files, and pushes changes to GitHub.
+    creates a backup, validates the result, then overwrites the local files.
     """
     def __init__(self):
         self.api_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
         self.gemini_key = os.environ.get('GEMINI_API_KEY', '').strip()
         
+    def _backup_file(self, filename):
+        """Create a .bak backup before overwriting any file."""
+        backup_path = filename + '.bak'
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                content = f.read()
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            print(f"[RUFLO_HEALER] Backup created: {backup_path}")
+            return True
+        except Exception as e:
+            print(f"[RUFLO_HEALER] Failed to create backup for {filename}: {e}")
+            return False
+
+    def _validate_python_syntax(self, code, filename):
+        """Validate Python syntax before overwriting to prevent crashes."""
+        import ast
+        try:
+            ast.parse(code)
+            return True
+        except SyntaxError as e:
+            print(f"[RUFLO_HEALER] ❌ Syntax validation FAILED for {filename}: {e}")
+            return False
+
     def scan_and_upgrade(self):
         if not self.gemini_key:
             print("[RUFLO_HEALER] GEMINI_API_KEY not found. Skipping autonomous upgrade.")
@@ -91,8 +115,24 @@ class RuFloHealer:
                 upgraded_code = self._get_ai_upgrade(filename, original_code)
                 
                 if upgraded_code and upgraded_code.strip() != original_code.strip():
-                    if "def " in upgraded_code or "import " in upgraded_code: # Basic sanity check
-                        print(f"[RUFLO_HEALER] RuFlo suggested valid upgrades for {filename}. Overwriting local file...")
+                    # Safety Check 1: Must contain basic Python signatures
+                    has_def = "def " in upgraded_code
+                    has_import = "import " in upgraded_code
+                    
+                    # Safety Check 2: Validate Python syntax
+                    is_valid_syntax = self._validate_python_syntax(upgraded_code, filename)
+                    
+                    # Safety Check 3: Must not be suspiciously shorter (< 50% of original)
+                    size_ok = len(upgraded_code) > len(original_code) * 0.5
+                    
+                    if has_def and has_import and is_valid_syntax and size_ok:
+                        # Create backup before overwriting
+                        backed_up = self._backup_file(filename)
+                        if not backed_up:
+                            print(f"[RUFLO_HEALER] ⚠️ Skipping {filename}: Could not create backup. Aborting for safety.")
+                            continue
+                            
+                        print(f"[RUFLO_HEALER] ✅ All safety checks passed. Overwriting {filename}...")
                         with open(filename, 'w', encoding='utf-8') as f:
                             f.write(upgraded_code)
                             
@@ -100,7 +140,12 @@ class RuFloHealer:
                         upload_to_github(filename)
                         time.sleep(2) # Prevent rate limiting
                     else:
-                        print(f"[RUFLO_HEALER] Safety check failed. AI returned invalid code for {filename}. Aborting overwrite.")
+                        reasons = []
+                        if not has_def: reasons.append("no 'def' found")
+                        if not has_import: reasons.append("no 'import' found")
+                        if not is_valid_syntax: reasons.append("syntax error")
+                        if not size_ok: reasons.append(f"too short ({len(upgraded_code)} vs {len(original_code)} chars)")
+                        print(f"[RUFLO_HEALER] ❌ Safety check FAILED for {filename}: {', '.join(reasons)}. Aborting overwrite.")
                 else:
                     print(f"[RUFLO_HEALER] No upgrades needed for {filename}. Code is optimal.")
                     
@@ -110,6 +155,7 @@ class RuFloHealer:
         print("="*50)
         print("🤖 [RUFLO_HEALER] Scan Complete.")
         print("="*50)
+
 
     def _call_ai(self, system_prompt, user_prompt, response_mime_type=None, max_tokens=8000):
         """Call direct Gemini API with fallback to OpenRouter on error or quota limit."""
