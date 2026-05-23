@@ -586,22 +586,50 @@ def backtest_recent_stats(save_package, features, today_str):
         for m in reversed(matches_list):
             if not m: lose_streak += 1
             else: break
+            
+        # Group by Date and calculate daily accuracy
+        eval_features['Matched'] = matches_list
+        unique_dates = []
+        for d in eval_features['Date']:
+            if d not in unique_dates:
+                unique_dates.append(d)
+        
+        daily_accuracy = []
+        for d in unique_dates:
+            day_mask = eval_features['Date'] == d
+            day_matches = int(eval_features[day_mask]['Matched'].sum())
+            day_total = int(day_mask.sum())
+            pct = round((day_matches / day_total) * 100, 1) if day_total > 0 else 0.0
+            daily_accuracy.append({
+                "date": d,
+                "accuracy_pct": pct,
+                "correct": day_matches,
+                "total": day_total
+            })
+            
+        oos_accuracy_pct = round(np.mean(matches_list) * 100, 1) if len(matches_list) > 0 else 0.0
         
         return {
             "today_matches": f"{int(today_matches_count)}/{int(today_total)}",
             "week_matches": f"{int(week_matches_count)}/{int(week_total)}",
             "prev_correct": prev_correct,
             "winning_streak": int(win_streak),
-            "losing_streak": int(lose_streak)
+            "losing_streak": int(lose_streak),
+            "oos_accuracy_pct": oos_accuracy_pct,
+            "daily_accuracy": daily_accuracy
         }
     except Exception as e:
+        print(f"Error in backtest_recent_stats: {e}")
         if os.path.exists(STATS_FILE):
             try:
                 with open(STATS_FILE, 'r') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    if 'daily_accuracy' not in data:
+                        data['daily_accuracy'] = []
+                    return data
             except Exception:
                 pass
-        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0}
+        return {"today_matches": "0/0", "week_matches": "0/0", "prev_correct": False, "winning_streak": 0, "losing_streak": 0, "oos_accuracy_pct": 0.0, "daily_accuracy": []}
 
 def get_yesterday_stats():
     """Calculate the exact predictions vs actuals for yesterday to feed the AI Council."""
@@ -961,7 +989,8 @@ def get_quick_prediction():
                 "weekly_matches": str(stats['week_matches']),
                 "winning_streak": int(stats['winning_streak']),
                 "losing_streak": int(stats['losing_streak']),
-                "oos_accuracy_pct": stats.get('oos_accuracy_pct')
+                "oos_accuracy_pct": stats.get('oos_accuracy_pct'),
+                "daily_accuracy": stats.get('daily_accuracy', [])
             },
             "history_trend": history_trend
         }

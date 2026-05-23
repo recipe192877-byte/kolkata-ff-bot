@@ -764,7 +764,7 @@
 
             <!-- Historical Analytics Chart -->
             <div id="chartBox" class="chart-container hidden">
-                <div class="stat-label" style="text-align: center; margin-bottom: 0.5rem;">Live Neural Trend Analysis</div>
+                <div class="stat-label" style="text-align: center; margin-bottom: 0.5rem;">AI Ensemble Daily Accuracy Trend</div>
                 <canvas id="historyChart"></canvas>
             </div>
 
@@ -1016,11 +1016,21 @@
                     }
 
                     // Chart Rendering
-                    if (data.data.history_trend) {
+                    if (data.data.stats && data.data.stats.daily_accuracy && data.data.stats.daily_accuracy.length > 0) {
                         document.getElementById('chartBox').classList.remove('hidden');
                         const ctx = document.getElementById('historyChart').getContext('2d');
-                        const labels = data.data.history_trend.map(h => `Bazi ${h.Bazi}`);
-                        const values = data.data.history_trend.map(h => h.Single);
+                        
+                        // We show the last 7 days of daily accuracy
+                        const dailyAcc = data.data.stats.daily_accuracy.slice(-7);
+                        // Format date like dd/mm/yyyy to dd/mm for compact labeling
+                        const labels = dailyAcc.map(item => {
+                            const parts = item.date.split('/');
+                            if (parts.length >= 2) {
+                                return `${parts[0]}/${parts[1]}`;
+                            }
+                            return item.date;
+                        });
+                        const values = dailyAcc.map(item => item.accuracy_pct);
                         
                         if(trendChart) trendChart.destroy();
                         
@@ -1030,23 +1040,52 @@
                             data: {
                                 labels: labels,
                                 datasets: [{
-                                    label: 'Winning Number',
+                                    label: 'AI Accuracy (%)',
                                     data: values,
-                                    borderColor: '#8b5cf6',
-                                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-                                    borderWidth: 2,
-                                    pointBackgroundColor: '#3b82f6',
-                                    pointRadius: 3,
-                                    tension: 0.3,
+                                    borderColor: '#10b981',
+                                    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                                    borderWidth: 3,
+                                    pointBackgroundColor: '#10b981',
+                                    pointBorderColor: '#fff',
+                                    pointBorderWidth: 2,
+                                    pointRadius: 5,
+                                    pointHoverRadius: 7,
+                                    tension: 0.4,
                                     fill: true
                                 }]
                             },
                             options: {
                                 responsive: true,
                                 maintainAspectRatio: false,
-                                plugins: { legend: { display: false } },
+                                plugins: { 
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                const index = context.dataIndex;
+                                                const item = dailyAcc[index];
+                                                return `Accuracy: ${context.parsed.y}% (${item.correct}/${item.total} Hits)`;
+                                            }
+                                        }
+                                    }
+                                },
                                 scales: {
-                                    y: { min: 0, max: 9, ticks: { stepSize: 1 } }
+                                    y: { 
+                                        min: 0, 
+                                        max: 100, 
+                                        ticks: { 
+                                            stepSize: 20,
+                                            callback: function(value) { return value + '%'; }
+                                        },
+                                        grid: {
+                                            color: 'rgba(255, 255, 255, 0.05)'
+                                        }
+                                    },
+                                    x: {
+                                        grid: {
+                                            display: false
+                                        }
+                                    }
                                 }
                             }
                         });

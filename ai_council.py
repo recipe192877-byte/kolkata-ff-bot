@@ -71,7 +71,7 @@ class AICouncil:
         # Re-load .env as safety net (no-op if already loaded or file missing)
         load_dotenv(override=False)
         self.api_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
-        self.gemini_key = os.environ.get('GEMINI_API_KEY', 'AIzaSyCwb5cLbFWnaZqh4Uzkow2L6ZCO4RDzFtg').strip()
+        self.gemini_key = os.environ.get('GEMINI_API_KEY', '').strip()
         self.last_meeting = None
         self.meeting_log = []
         # Diagnostic logging for deployment debugging
@@ -82,52 +82,107 @@ class AICouncil:
             print("[COUNCIL] ⚠️ WARNING: No GEMINI_API_KEY found! Set it in environment variables.")
 
     def _call_ai(self, model, system_prompt, user_prompt, max_tokens=8000):
-        """Call direct Gemini API with retries on temporary errors."""
-        if not self.gemini_key:
-            return None
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_key}"
-        payload = {
-            "contents": [
-                {
+        """Call direct Gemini API with fallback to OpenRouter on error or quota limit."""
+        # 1. Try Direct Gemini API first (if key exists)
+        if self.gemini_key:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_key}"
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {
+                                "text": user_prompt
+                            }
+                        ]
+                    }
+                ],
+                "systemInstruction": {
                     "parts": [
                         {
-                            "text": user_prompt
+                            "text": system_prompt
                         }
                     ]
+                },
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": max_tokens
                 }
-            ],
-            "systemInstruction": {
-                "parts": [
-                    {
-                        "text": system_prompt
-                    }
-                ]
-            },
-            "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": max_tokens
             }
-        }
-        headers = {
-            "Content-Type": "application/json"
-        }
-        
-        for attempt in range(3):
+            headers = {
+                "Content-Type": "application/json"
+            }
             try:
+                print(f"[COUNCIL] Trying direct Gemini API...")
                 response = requests.post(url, headers=headers, json=payload, timeout=30)
                 if response.status_code == 200:
                     data = response.json()
                     return data['candidates'][0]['content']['parts'][0]['text']
-                elif response.status_code in [429, 503]:
-                    print(f"[COUNCIL] Gemini API returned {response.status_code}. Retrying in {attempt*2 + 2}s...")
-                    time.sleep(attempt * 2 + 2)
                 else:
-                    print(f"[COUNCIL] Gemini API failed with status code {response.status_code}: {response.text}")
-                    break
+                    print(f"[COUNCIL] Direct Gemini API failed with status code {response.status_code}: {response.text[:200]}")
             except Exception as e:
-                print(f"[COUNCIL] Error calling Gemini API: {e}")
-                time.sleep(attempt * 2 + 2)
+                print(f"[COUNCIL] Direct Gemini API exception: {e}")
+
+        # 2. Fallback to OpenRouter (if key exists)
+        if self.api_key:
+            print(f"[COUNCIL] Falling back to OpenRouter...")
+            url = OPENROUTER_URL
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/kolkata-ff-bot",
+                "X-Title": "Kolkata FF Bot"
+            }
+            
+            # Try specific robust free models
+            models_to_try = []
+            if model and model != 'openrouter/free':
+                models_to_try.append(model)
+            
+            models_to_try.extend([
+                "google/gemini-2.5-flash-preview:free",
+                "google/gemini-2.0-flash-exp:free",
+                "qwen/qwen-2.5-coder-32b-instruct:free",
+                "meta-llama/llama-3.3-70b-instruct:free",
+                "openrouter/free"
+            ])
+            
+            # Remove duplicates while preserving order
+            seen = set()
+            models_to_try = [x for x in models_to_try if not (x in seen or seen.add(x))]
+            
+            for model_name in models_to_try:
+                payload = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": max_tokens
+                }
+                
+                for attempt in range(2):
+                    try:
+                        print(f"[COUNCIL] Trying OpenRouter model: {model_name} (attempt {attempt+1})...")
+                        response = requests.post(url, headers=headers, json=payload, timeout=45)
+                        if response.status_code == 200:
+                            data = response.json()
+                            if 'choices' in data and len(data['choices']) > 0:
+                                msg = data['choices'][0]['message']
+                                content = msg.get('content')
+                                if not content and msg.get('reasoning'):
+                                    content = msg.get('reasoning')
+                                if content:
+                                    print(f"[COUNCIL] OpenRouter Success with {model_name}!")
+                                    return content
+                            print(f"[COUNCIL] OpenRouter response missing content for {model_name}: {data}")
+                        else:
+                            print(f"[COUNCIL] OpenRouter attempt failed for {model_name}: {response.status_code} - {response.text[:200]}")
+                            time.sleep(attempt * 2 + 1)
+                    except Exception as e:
+                        print(f"[COUNCIL] OpenRouter exception for {model_name} on attempt {attempt+1}: {e}")
+                        time.sleep(attempt * 2 + 1)
+        
         return None
 
     def _build_data_prompt(self, prediction_data):
