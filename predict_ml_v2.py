@@ -1,4 +1,4 @@
-import pandas as pd
+﻿import pandas as pd
 import numpy as np
 import joblib
 import warnings
@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 warnings.filterwarnings('ignore')
 
-# ── Self-Learning AI Brain ──
+# â”€â”€ Self-Learning AI Brain â”€â”€
 brain = KolkataVectorMemory(context_size=5, db_path='kolkata_brain.json')
 
 MODEL_FILE = 'xgb_model.joblib'
@@ -167,7 +167,7 @@ def load_and_preprocess_data(filepath=DATA_FILE):
             df.loc[bazi_mask, [f'Bazi_Freq_{d}' for d in range(10)]] = bazi_df[[f'Bazi_Freq_{d}' for d in range(10)]].values
         
         # === STREAK FEATURES ===
-        df['Same_As_Prev'] = (df['Single'] == df['Single'].shift(1)).astype(int)
+        df['Same_As_Prev'] = (df['Single'].shift(1) == df['Single'].shift(2)).astype(int)  # Fixed: no longer leaks current row's Single
         df['Repeat_In_3'] = 0
         for i in range(3, len(df)):
             last3 = df['Single'].iloc[i-3:i].values
@@ -230,7 +230,7 @@ def get_feature_columns():
 def create_ensemble_models():
     """Create 4 diverse models with STRONG regularization to prevent overfitting."""
     
-    # XGBoost — low depth, high regularization
+    # XGBoost â€” low depth, high regularization
     xgb_model = xgb.XGBClassifier(
         n_estimators=150,
         max_depth=3,
@@ -245,7 +245,7 @@ def create_ensemble_models():
         eval_metric='mlogloss'
     )
     
-    # LightGBM — complementary to XGB
+    # LightGBM â€” complementary to XGB
     lgb_model = lgb.LGBMClassifier(
         n_estimators=150,
         max_depth=3,
@@ -259,7 +259,7 @@ def create_ensemble_models():
         verbose=-1
     )
     
-    # Random Forest — lower depth, balanced
+    # Random Forest â€” lower depth, balanced
     rf_model = RandomForestClassifier(
         n_estimators=200,
         max_depth=4,
@@ -270,7 +270,7 @@ def create_ensemble_models():
         class_weight='balanced'
     )
     
-    # Gradient Boosting — sklearn variant, different algorithm
+    # Gradient Boosting â€” sklearn variant, different algorithm
     gb_model = GradientBoostingClassifier(
         n_estimators=100,
         max_depth=3,
@@ -812,7 +812,7 @@ def get_today_prediction_history(save_package, features, original_df):
             history.append({
                 "bazi": bazi_num,
                 "predictions": pred_nums,
-                "actual": actual,         # None for pending — frontend shows '--'
+                "actual": actual,         # None for pending â€” frontend shows '--'
                 "status": status
             })
             
@@ -903,7 +903,7 @@ def get_quick_prediction():
     prev_patti = last_record['Patti']
     pd1, pd2, pd3 = extract_patti_digits(prev_patti)
     
-    same_as_prev = 1 if len(original_df) > 1 and original_df.iloc[-1]['Single'] == original_df.iloc[-2]['Single'] else 0
+    same_as_prev = 1 if len(original_df) > 2 and original_df.iloc[-2]['Single'] == original_df.iloc[-3]['Single'] else 0  # Matches training: shift(1)==shift(2)
     last3 = original_df['Single'].tail(3).values
     repeat_in_3 = int(len(set(last3)) < 3) if len(last3) == 3 else 0
     
@@ -1147,3 +1147,5 @@ if __name__ == "__main__":
             print(f"  Number {p['number']} ({p['probability']}%) - Top Pattis: {', '.join(p['pattis'])}")
     else:
         print(f"Error: {res['message']}")
+
+
