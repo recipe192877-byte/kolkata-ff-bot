@@ -73,6 +73,13 @@
     transition: all 0.2s;
   }
   .sound-btn:hover { background: rgba(0,255,200,0.1); }
+  .reset-btn {
+    cursor: pointer; background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border); color: var(--white);
+    padding: 6px 14px; border-radius: 50px; font-size: 0.8rem;
+    transition: all 0.2s;
+  }
+  .reset-btn:hover { background: rgba(255,68,102,0.1); border-color: rgba(255,68,102,0.4); color: #ff4466; }
 
   /* MAIN GRID */
   .main {
@@ -310,6 +317,7 @@
   <div style="display:flex;gap:10px;align-items:center">
     <span style="font-size:0.75rem;color:var(--dim)">Round #<span id="roundNum">0</span></span>
     <button class="sound-btn" onclick="toggleSound()" id="soundBtn">&#128266; Sound ON</button>
+    <button class="reset-btn" onclick="clearHistory()" id="resetBtn">&#128465; Clear History</button>
   </div>
 </div>
 
@@ -545,6 +553,13 @@ function updateDashboard(data) {
     }
   }
 
+  if (data.round_num === 0) {
+    lastRoundNum = 0;
+    document.getElementById('lastRoundLbl').textContent = 'Waiting for data...';
+    document.getElementById('lastMult').textContent = '-';
+    document.getElementById('lastMult').className = 'mult-display';
+  }
+
   const sig = pred.signal || 'neutral';
   const actEl = document.getElementById('predAction');
   actEl.textContent = pred.action || 'WATCH';
@@ -587,7 +602,10 @@ function updateDashboard(data) {
   const grid = document.getElementById('histGrid');
   // Rebuild grid only when history length changes (avoids duplication)
   const renderedCount = parseInt(grid.dataset.renderedCount || '0');
-  if (hist.length > renderedCount) {
+  if (hist.length === 0) {
+    grid.innerHTML = '';
+    grid.dataset.renderedCount = '0';
+  } else if (hist.length > renderedCount) {
     const newItems = hist.slice(renderedCount);
     newItems.forEach(v => {
       const badge = document.createElement('div');
@@ -684,6 +702,41 @@ function renderManualRecent() {
     const colors = {b1:'#ff4466',b2:'#ffd700',b3:'#00ff88',b4:'#00ffc8'};
     return `<span class="manual-tag" style="color:${colors[cls]};border-color:${colors[cls]}40">\u270F ${v.toFixed(2)}x</span>`;
   }).join('');
+}
+
+function clearHistory() {
+  if (!confirm('Are you sure you want to clear predictor history and reset round count?')) return;
+  const btn = document.getElementById('resetBtn');
+  btn.disabled = true;
+  btn.textContent = '⌛ Clearing...';
+  
+  fetch('/api/clear_history', {
+    method: 'POST'
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      document.getElementById('histGrid').innerHTML = '';
+      document.getElementById('histGrid').dataset.renderedCount = '0';
+      manualQueue.length = 0;
+      renderManualRecent();
+      
+      chart.data.labels = [];
+      chart.data.datasets[0].data = [];
+      chart.update();
+      
+      beep(300, 200);
+    } else {
+      alert('Error clearing history: ' + (data.error || 'Unknown error'));
+    }
+  })
+  .catch(e => {
+    alert('Network error: ' + e.message);
+  })
+  .finally(() => {
+    btn.disabled = false;
+    btn.innerHTML = '🗑️ Clear History';
+  });
 }
 
 // Enter key to submit
