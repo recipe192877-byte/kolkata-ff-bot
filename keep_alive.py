@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+﻿from flask import Flask, render_template, jsonify, request
 from threading import Thread, Lock
 import os
 import time
@@ -136,7 +136,7 @@ def api_health():
         "model_loaded": has_model,
         "data_available": has_data,
         "oos_accuracy_pct": oos_accuracy,
-        "brain_capacity": predict_ml.brain.get_brain_capacity() if hasattr(predict_ml, 'brain') and hasattr(predict_ml.brain, 'get_brain_capacity') else "N/A",
+        "brain_capacity": "N/A (v3 - brain removed)",
         "healer": "RuFlo Autonomous Code Upgrader is ACTIVE",
         "uptime": int(time.time()),
         "cache_size": len(_cache)
@@ -234,7 +234,7 @@ def api_council():
             prediction_data = predict_ml.get_quick_prediction()
             _set_cache('predict', prediction_data)
 
-        if prediction_data.get('status') != 'success':
+        if prediction_data.get('status') not in ('success', 'ok'):
             return jsonify({"status": "error", "message": "ML prediction failed. Cannot hold council meeting."}), 500
 
         # Check cache for council (reuse if recent)

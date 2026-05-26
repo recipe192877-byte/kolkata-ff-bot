@@ -1030,7 +1030,7 @@
                             }
                             return item.date;
                         });
-                        const values = dailyAcc.map(item => item.accuracy_pct);
+                        const values = dailyAcc.map(item => item.acc !== undefined ? item.acc : (item.accuracy_pct || 0));
                         
                         if(trendChart) trendChart.destroy();
                         
@@ -1563,4 +1563,5 @@
     </script>
 </body>
 </html>
+
 

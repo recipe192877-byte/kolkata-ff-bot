@@ -6,3 +6,8 @@ backtest_stats.json
 predictions_store.json
 *.joblib
 kolkata_brain.json
+kolkata_model_v3\.joblib
+oos_stats\.json
+reports/
+daily_report\.json
+ai_config\.json
