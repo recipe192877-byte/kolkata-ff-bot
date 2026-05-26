@@ -1,4 +1,4 @@
-import time
+﻿import time
 import datetime
 import traceback
 import os
@@ -66,7 +66,7 @@ def start_bot():
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] New data detected ({current_count} vs {last_record_count}). Retraining AI Model...")
                 safe_retrain()
                 last_record_count = current_count
-                # Brain is already rebuilt inside train_and_save_model() — no need to save again
+                # Brain is already rebuilt inside train_and_save_model() â€” no need to save again
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Retrain complete. Brain capacity: {predict_ml.brain.get_brain_capacity()} patterns")
 
             elif current_count < last_record_count:
@@ -104,7 +104,7 @@ def start_bot():
                             last_evolution_date = current_date  # Mark as done ONLY on success
                         else:
                             print(f"[EVOLUTION] Meeting failed: {evo_result.get('message', 'Unknown error')}. Will retry on next cycle.")
-                            # DON'T set last_evolution_date — allow retry on next loop cycle
+                            # DON'T set last_evolution_date â€” allow retry on next loop cycle
                             
                         # Ensure the 'reports' directory exists
                         os.makedirs('reports', exist_ok=True)
@@ -125,13 +125,13 @@ def start_bot():
                 except Exception as evo_err:
                     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Error during daily evolution: {evo_err}")
                     traceback.print_exc()
-                    # DON'T set last_evolution_date — allow retry on next loop cycle
+                    # DON'T set last_evolution_date â€” allow retry on next loop cycle
 
             # Reset failure counter on success
             consecutive_failures = 0
             
             # Wait 60 minutes
-            time.sleep(3600)
+            time.sleep(300)  # 5 min cycle for fresh bazi
             
         except KeyboardInterrupt:
             print("\nBackground worker stopped manually.")

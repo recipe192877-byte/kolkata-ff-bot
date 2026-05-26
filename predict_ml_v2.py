@@ -547,17 +547,20 @@ def get_latest_prediction():
         pass
 
     return {
-        'status':         'ok',
-        'next_bazi':      int(next_bazi),
-        'top_3':          top3,
-        'top_1':          top3[0],
-        'confidence':     conf_pct,
-        'probabilities':  {str(d): round(float(blended[d]) * 100, 1) for d in range(10)},
-        'oos_accuracy':   oos_acc,
+        'status':          'ok',
+        'next_bazi':       int(next_bazi),
+        'top_3':           top3,
+        'top_1':           top3[0],
+        'confidence':      conf_pct,
+        'probabilities':   {str(d): round(float(blended[d]) * 100, 1) for d in range(10)},
+        'oos_accuracy':    oos_acc,
         'random_baseline': 27.1,
-        'total_records':  len(original_df),
-        'today_records':  len(today_data),
-        'is_today':       is_today,
+        'total_records':   len(original_df),
+        'today_records':   len(today_data),
+        'is_today':        is_today,
+        'data_stale':      data_stale,
+        'last_data_date':  str(last_date) if last_date else None,
+        'as_of_ist':       now_ist.strftime('%d/%m/%Y %H:%M IST'),
     }
 
 
@@ -769,3 +772,4 @@ def get_yesterday_stats() -> dict:
     except Exception as e:
         print(f"Error getting yesterday stats: {e}")
         return {}
+

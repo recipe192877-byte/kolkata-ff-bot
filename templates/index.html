@@ -931,7 +931,17 @@
                     initialBox.classList.add('hidden');
                     resultBox.classList.remove('hidden');
 
-                    document.getElementById('baziLabel').textContent = `TARGET BAZI: ${data.data.next_bazi}`;
+                    // Show bazi label with IST timestamp
+                    let baziText = `TARGET BAZI: ${data.data.next_bazi || '--'}`;
+                    if (data.data.as_of_ist) baziText += ` | ${data.data.as_of_ist}`;
+                    document.getElementById('baziLabel').textContent = baziText;
+                    // Stale data warning
+                    if (data.data.data_stale) {
+                        document.getElementById('errorBox').classList.remove('hidden');
+                        document.getElementById('errorBox').textContent = '⚠️ Data stale! Last update: ' + (data.data.last_data_date || 'unknown') + '. Scraping fresh data...';
+                        document.getElementById('errorBox').style.background = 'rgba(245,158,11,0.15)';
+                        document.getElementById('errorBox').style.borderColor = 'var(--warning)';
+                    }
                     
                     // Remove glow before rolling
                     document.getElementById('num1').classList.remove('super-glow');
@@ -1563,5 +1573,6 @@
     </script>
 </body>
 </html>
+
 
 
