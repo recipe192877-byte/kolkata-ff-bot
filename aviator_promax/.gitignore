@@ -1,0 +1,14 @@
+﻿# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment secrets
+.env
+
+# Runtime data & cache
+aviator_log.csv
+history_cache.json
+
+# Chrome profile (user-specific)
+# (not committed — each user sets their own PROFILE_DIR)
