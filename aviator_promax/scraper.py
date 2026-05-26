@@ -7,12 +7,13 @@ AVIATOR_URL = os.getenv("AVIATOR_URL", "https://pari-betting.com/en/casino/insta
 PORT = int(os.getenv("DEBUG_PORT", "9222"))
 
 GAME_SELECTORS = [
+    ".payouts-block .payout",
+    ".payouts-block div",
     ".stats-list .bubble-multiplier",
     ".payouts .payout-item",
     "div[class*='bubble']",
     "div[class*='multiplier']",
     ".stats-list div",
-    ".payouts-block div",
     ".bet-results__coeff",
     "app-game-history div",
     "[class*='history'] div",
@@ -108,7 +109,7 @@ def scrape_loop(predictor, push_fn, status_fn):
             try:
                 for btn in page.locator("button").all()[:20]:
                     try:
-                        txt = btn.inner_text(timeout=500).strip().lower()
+                        txt = btn.text_content(timeout=1000).strip().lower()
                         if txt == "play":
                             status_fn("Play button found! Clicking...")
                             btn.click()
@@ -135,12 +136,9 @@ def scrape_loop(predictor, push_fn, status_fn):
                 status_fn(f"Waiting for Aviator to load... ({(i+1)*2}s elapsed)")
 
         if not frame:
-            try:
-                frame = page.main_frame
-                status_fn("Using main frame as fallback (iframe not found).")
-            except Exception:
-                status_fn("Cannot access page frames. Reconnecting...")
-                return
+            status_fn("Aviator game elements not detected in any frame. Retrying...")
+            time.sleep(5)
+            return
 
         # --- Detect working data selector ---
         time.sleep(3)
@@ -148,7 +146,7 @@ def scrape_loop(predictor, push_fn, status_fn):
         if selector:
             status_fn("LIVE data found! Predictions starting!")
         else:
-            selector = ".stats-list div"
+            selector = ".payouts-block .payout"
             status_fn("Tracking active (fallback selector).")
 
         # --- Live prediction loop ---
@@ -159,10 +157,15 @@ def scrape_loop(predictor, push_fn, status_fn):
         while True:
             try:
                 elements = frame.locator(selector).all()
-                current = [
-                    v for el in elements
-                    if (v := _parse(el.inner_text(timeout=300))) is not None
-                ]
+                current = []
+                for el in elements:
+                    try:
+                        txt = el.text_content(timeout=1000)
+                        v = _parse(txt)
+                        if v is not None:
+                            current.append(v)
+                    except Exception:
+                        continue
 
                 if current:
                     consecutive_empty = 0
@@ -229,10 +232,17 @@ def scrape_loop(predictor, push_fn, status_fn):
 def _find_frame(page):
     """Find the Aviator game iframe inside the page."""
     try:
+        # Look for a frame containing payouts-block or stats-list or bubble-multiplier
         for f in page.frames:
-            u = f.url.lower()
-            if any(k in u for k in ["aviator", "spribe", "aviatorgame"]):
-                return f
+            try:
+                if (
+                    f.locator(".payouts-block").count() > 0
+                    or f.locator(".stats-list").count() > 0
+                    or f.locator(".bubble-multiplier").count() > 0
+                ):
+                    return f
+            except Exception:
+                pass
     except Exception:
         pass
     return None
@@ -242,10 +252,14 @@ def _find_selector(frame):
     for sel in GAME_SELECTORS:
         try:
             els = frame.locator(sel).all()
-            valid = sum(
-                1 for el in els[:5]
-                if _parse(el.inner_text(timeout=300)) is not None
-            )
+            valid = 0
+            for el in els[:5]:
+                try:
+                    txt = el.text_content(timeout=1000).strip()
+                    if _parse(txt) is not None:
+                        valid += 1
+                except Exception:
+                    continue
             if valid >= 2:
                 return sel
         except Exception:
