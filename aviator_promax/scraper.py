@@ -1,10 +1,8 @@
-import os, time, subprocess, socket
+import os, time, socket
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-CHROME_EXE  = os.getenv("CHROME_EXE", r"C:\Program Files\Google\Chrome\Application\chrome.exe")
-PROFILE_DIR = os.getenv("PROFILE_DIR", r"C:\chrome_aviator_manual")
 AVIATOR_URL = os.getenv("AVIATOR_URL", "https://pari-betting.com/en/casino/instant-games/game/spribe-in-aviator-insta")
 PORT = int(os.getenv("DEBUG_PORT", "9222"))
 
@@ -21,7 +19,9 @@ GAME_SELECTORS = [
 ]
 
 def _port_open():
+    """Check if Chrome remote debug port is active."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
         try:
             s.connect(("127.0.0.1", PORT))
             return True
@@ -29,11 +29,15 @@ def _port_open():
             return False
 
 def scrape_loop_with_retry(predictor, push_fn, status_fn):
-    """Outer retry loop - connects passively and reconnects automatically."""
+    """Outer retry loop - passively waits for Chrome, reconnects on crash."""
     while True:
         try:
             if not _port_open():
-                status_fn("Waiting for Chrome... Open Chrome with remote debugging on port 9222.")
+                status_fn(
+                    "Waiting for Chrome... "
+                    "Open Chrome with remote debugging on port 9222 "
+                    "(use OPEN_CHROME.bat)."
+                )
                 time.sleep(5)
                 continue
             scrape_loop(predictor, push_fn, status_fn)
@@ -41,7 +45,8 @@ def scrape_loop_with_retry(predictor, push_fn, status_fn):
             status_fn("Bot stopped by user.")
             break
         except Exception as e:
-            status_fn(f"Disconnected: {str(e)[:80]}. Retrying in 5s...")
+            err = str(e)[:80]
+            status_fn(f"Disconnected: {err}. Reconnecting in 5s...")
             time.sleep(5)
 
 def scrape_loop(predictor, push_fn, status_fn):
@@ -50,56 +55,71 @@ def scrape_loop(predictor, push_fn, status_fn):
     status_fn("Chrome debug session detected! Connecting...")
 
     with sync_playwright() as pw:
+        # --- Connect to running Chrome via CDP ---
         try:
             browser = pw.chromium.connect_over_cdp(f"http://localhost:{PORT}")
-            ctx = browser.contexts[0]
         except Exception as e:
             status_fn(f"CDP connection failed: {e}")
             time.sleep(5)
             return
 
-        # Find existing Aviator page
+        try:
+            ctx = browser.contexts[0]
+        except IndexError:
+            status_fn("No browser context found. Is Aviator open in Chrome?")
+            time.sleep(5)
+            return
+
+        # --- Wait for Aviator tab to be opened by user ---
         page = None
         while True:
-            # Check if Chrome connection is still alive by listing pages
             try:
                 pages = ctx.pages
-            except Exception as e:
-                status_fn("Chrome connection lost.")
+            except Exception:
+                status_fn("Chrome connection lost. Waiting to reconnect...")
                 return
 
             for p in pages:
                 try:
                     url = p.url
-                    if "spribe-in-aviator-insta" in url or "aviator-next.spribegaming" in url:
+                    if (
+                        "spribe-in-aviator-insta" in url
+                        or "aviator-next.spribegaming" in url
+                        or "spribe" in url.lower()
+                    ):
                         page = p
                         status_fn("Aviator game tab detected!")
                         break
-                except:
+                except Exception:
                     pass
-            
+
             if page:
                 break
-            
-            status_fn("Chrome connected. Waiting for you to open the Aviator game tab...")
+
+            status_fn(
+                "Chrome connected. "
+                "Please open the Aviator game page in Chrome to start tracking..."
+            )
             time.sleep(5)
 
-        # Once page is found, check for the frame
-        # Auto-click Play button if game iframe not yet loaded
-        frame = _find_frame(page)
-        if not frame:
+        # --- Auto-click Play button if iframe not yet loaded ---
+        if not _find_frame(page):
             status_fn("Looking for Play button...")
             try:
                 for btn in page.locator("button").all()[:20]:
-                    if btn.inner_text(timeout=500).strip().lower() == "play":
-                        status_fn("Play button found! Clicking...")
-                        btn.click()
-                        time.sleep(10)
-                        break
+                    try:
+                        txt = btn.inner_text(timeout=500).strip().lower()
+                        if txt == "play":
+                            status_fn("Play button found! Clicking...")
+                            btn.click()
+                            time.sleep(10)
+                            break
+                    except Exception:
+                        pass
             except Exception as e:
-                status_fn(f"Play button error: {e}")
+                status_fn(f"Play button scan error: {str(e)[:50]}")
 
-        # Find iframe (wait up to 60s)
+        # --- Wait for game iframe (up to 60s) ---
         frame = None
         for i in range(30):
             try:
@@ -108,103 +128,138 @@ def scrape_loop(predictor, push_fn, status_fn):
                     status_fn("Aviator game iframe found!")
                     break
             except Exception as e:
-                status_fn(f"Error checking iframe: {str(e)[:60]}")
+                status_fn(f"Iframe error: {str(e)[:50]}")
                 return
             time.sleep(2)
-            if i % 5 == 4:
-                status_fn(f"Waiting for Aviator to load... ({(i+1)*2}s)")
+            if i > 0 and i % 5 == 4:
+                status_fn(f"Waiting for Aviator to load... ({(i+1)*2}s elapsed)")
 
         if not frame:
-            frame = page.main_frame
-            status_fn("Using main frame (iframe not found).")
+            try:
+                frame = page.main_frame
+                status_fn("Using main frame as fallback (iframe not found).")
+            except Exception:
+                status_fn("Cannot access page frames. Reconnecting...")
+                return
 
-        # Find data selector
+        # --- Detect working data selector ---
         time.sleep(3)
         selector = _find_selector(frame)
         if selector:
             status_fn("LIVE data found! Predictions starting!")
         else:
             selector = ".stats-list div"
-            status_fn("Tracking active.")
+            status_fn("Tracking active (fallback selector).")
 
-        # Live prediction loop
+        # --- Live prediction loop ---
         last_history = []
-        last_mult    = None
+        last_mult = None
+        consecutive_empty = 0
 
         while True:
             try:
                 elements = frame.locator(selector).all()
-                current = [v for el in elements
-                           if (v := _parse(el.inner_text())) is not None]
+                current = [
+                    v for el in elements
+                    if (v := _parse(el.inner_text(timeout=300))) is not None
+                ]
 
                 if current:
+                    consecutive_empty = 0
                     if not last_history:
+                        # First batch of data
                         last_history = current
                         for v in reversed(current[:30]):
                             predictor.add(v)
                         last_mult = current[0]
                         predictor.save_history()
                     else:
+                        # Detect new rounds since last read
                         new_rounds = []
                         for v in current:
-                            if v == last_history[0]: break
+                            if v == last_history[0]:
+                                break
                             new_rounds.append(v)
+
                         if new_rounds:
                             for v in reversed(new_rounds):
                                 predictor.add(v)
                             last_history = current
-                            last_mult    = new_rounds[0]
+                            last_mult = new_rounds[0]
                             predictor.save_history()
 
                     pred = predictor.predict()
-                    push_fn(pred, predictor.get_history_list(),
-                            last_mult, predictor.round_num, "Live")
+                    push_fn(
+                        pred,
+                        predictor.get_history_list(),
+                        last_mult,
+                        predictor.round_num,
+                        "Live",
+                    )
+                else:
+                    consecutive_empty += 1
+                    # If we see 30+ consecutive empty reads, selector may have broken
+                    if consecutive_empty == 30:
+                        status_fn("No data from selector. Trying to re-detect...")
+                        new_sel = _find_selector(frame)
+                        if new_sel and new_sel != selector:
+                            selector = new_sel
+                            status_fn(f"Switched to selector: {selector}")
+                        consecutive_empty = 0
 
                 time.sleep(1.5)
 
             except KeyboardInterrupt:
-                status_fn("Bot stopped.")
+                status_fn("Bot stopped by user.")
                 raise
             except Exception as e:
-                status_fn(f"Error: {str(e)[:60]}")
+                err = str(e)[:60]
+                status_fn(f"Tracking error: {err}")
                 time.sleep(3)
-                # Check if page is still alive
+                # Check if page connection is still alive
                 try:
                     _ = page.url
-                except:
-                    status_fn("Page closed or connection lost. Reconnecting...")
-                    raise RuntimeError("Page closed, need reconnect")
-
-        browser.close()
+                except Exception:
+                    status_fn("Page closed or tab navigated away. Reconnecting...")
+                    raise RuntimeError("Page closed - need reconnect")
 
 
-def _dismiss_popups(page):
-    for sel in ["button:has-text('No, thanks')", "button:has-text('Accept')",
-                "button:has-text('Close')", "[aria-label='Close']",
-                "[class*='close-btn']", "[class*='modal__close']"]:
-        try:
-            for el in page.locator(sel).all()[:2]:
-                if el.is_visible(timeout=400):
-                    el.click(timeout=400); time.sleep(0.2)
-        except: pass
+# ===== HELPERS =====
 
 def _find_frame(page):
-    for f in page.frames:
-        u = f.url.lower()
-        if any(k in u for k in ["aviator","spribe","aviatorgame"]):
-            return f
+    """Find the Aviator game iframe inside the page."""
+    try:
+        for f in page.frames:
+            u = f.url.lower()
+            if any(k in u for k in ["aviator", "spribe", "aviatorgame"]):
+                return f
+    except Exception:
+        pass
     return None
 
 def _find_selector(frame):
+    """Try each known selector and return the first one that yields numeric data."""
     for sel in GAME_SELECTORS:
         try:
-            valid = sum(1 for el in frame.locator(sel).all()[:5]
-                       if _parse(el.inner_text()) is not None)
-            if valid >= 2: return sel
-        except: continue
+            els = frame.locator(sel).all()
+            valid = sum(
+                1 for el in els[:5]
+                if _parse(el.inner_text(timeout=300)) is not None
+            )
+            if valid >= 2:
+                return sel
+        except Exception:
+            continue
     return None
 
 def _parse(txt):
+    """Parse a multiplier string like '2.35x' -> 2.35. Returns None on failure."""
     try:
-        return float(txt.strip().replace("x","").replace(",",".").replace(" ",""))
-    except: return None
+        cleaned = txt.strip().replace("x", "").replace(",", ".").replace(" ", "")
+        v = float(cleaned)
+        # Sanity check: Aviator multipliers are always >= 1.00
+        if v >= 1.0:
+            return v
+    except Exception:
+        pass
+    return None

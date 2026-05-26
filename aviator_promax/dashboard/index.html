@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -395,7 +395,7 @@
 
   <!-- ===== MANUAL RESULT ENTRY ===== -->
   <div class="card manual-card">
-    <div class="card-title">&#9999;&#65039; Manual Result Entry — Type Round Result Yourself</div>
+    <div class="card-title">&#9999;&#65039; Manual Result Entry � Type Round Result Yourself</div>
     <div class="manual-inner">
       <div class="manual-field">
         <label for="manualInput">Multiplier Value (e.g. 2.35)</label>
@@ -449,7 +449,7 @@ const chart = new Chart(document.getElementById('multChart'), {
     plugins: { legend: { display: false } },
     scales: {
       x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7080a0', maxTicksLimit: 10 } },
-      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7080a0' }, min: 0 }
+      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7080a0' }, min: 1 }
     }
   }
 });
@@ -503,6 +503,18 @@ socket.on('disconnect', () => {
 });
 socket.on('status', data => {
   document.getElementById('statusText').textContent = data.msg;
+  // Update status dot color based on message
+  const dot = document.getElementById('statusDot');
+  const msg = (data.msg || '').toLowerCase();
+  if (msg.includes('waiting') || msg.includes('connecting')) {
+    dot.style.background = '#ffd700';
+  } else if (msg.includes('live') || msg.includes('found') || msg.includes('starting')) {
+    dot.style.background = '#00ff88';
+  } else if (msg.includes('error') || msg.includes('crash') || msg.includes('lost')) {
+    dot.style.background = '#ff4466';
+  } else {
+    dot.style.background = '#00ffc8';
+  }
 });
 socket.on('update', data => {
   updateDashboard(data);
@@ -527,7 +539,7 @@ function updateDashboard(data) {
 
     const isNew = (data.round_num || 0) > lastRoundNum;
     if (isNew) {
-      const src = data.status === 'Manual' ? ' ✏️' : '';
+      const src = data.status === 'Manual' ? ' ??' : '';
       document.getElementById('lastRoundLbl').textContent = `Round #${data.round_num}${src}`;
       lastRoundNum = data.round_num;
     }
@@ -573,16 +585,18 @@ function updateDashboard(data) {
   chart.update('active');
 
   const grid = document.getElementById('histGrid');
-  const existing = grid.children.length;
-  const newCount = hist.length - existing;
-  if (newCount > 0) {
-    hist.slice(-newCount).forEach(v => {
+  // Rebuild grid only when history length changes (avoids duplication)
+  const renderedCount = parseInt(grid.dataset.renderedCount || '0');
+  if (hist.length > renderedCount) {
+    const newItems = hist.slice(renderedCount);
+    newItems.forEach(v => {
       const badge = document.createElement('div');
       badge.className = 'hist-badge ' + multClass(v) + ' new';
       badge.textContent = v.toFixed(2) + 'x';
       grid.insertBefore(badge, grid.firstChild);
       setTimeout(() => badge.classList.remove('new'), 500);
     });
+    grid.dataset.renderedCount = hist.length;
     while (grid.children.length > 80) grid.removeChild(grid.lastChild);
   }
 
@@ -682,3 +696,4 @@ fetch('/api/state').then(r=>r.json()).then(updateDashboard).catch(()=>{});
 </script>
 </body>
 </html>
+
