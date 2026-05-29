@@ -3,9 +3,11 @@ from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-AVIATOR_URL = os.getenv("AVIATOR_URL", "https://pari-betting.com/en/casino/instant-games/game/spribe-in-aviator-insta")
+AVIATOR_URL = os.getenv("AVIATOR_URL",
+    "https://pari-betting.com/en/casino/instant-games/game/spribe-in-aviator-insta")
 PORT = int(os.getenv("DEBUG_PORT", "9222"))
 
+# ─── Selector priority list (confirmed working ones first) ───────────────────
 GAME_SELECTORS = [
     ".payouts-block .payout",
     ".payouts-block div",
@@ -19,8 +21,8 @@ GAME_SELECTORS = [
     "[class*='history'] div",
 ]
 
+# ─── CDP port check ───────────────────────────────────────────────────────────
 def _port_open():
-    """Check if Chrome remote debug port is active."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(1)
         try:
@@ -29,8 +31,10 @@ def _port_open():
         except:
             return False
 
-def scrape_loop_with_retry(predictor, push_fn, status_fn):
-    """Outer retry loop - passively waits for Chrome, reconnects on crash."""
+
+# ─── Outer retry loop ─────────────────────────────────────────────────────────
+def scrape_loop_with_retry(predictor, push_fn, status_fn, reset_event=None):
+    """Passively waits for Chrome on port 9222, reconnects on any crash."""
     while True:
         try:
             if not _port_open():
@@ -41,7 +45,7 @@ def scrape_loop_with_retry(predictor, push_fn, status_fn):
                 )
                 time.sleep(5)
                 continue
-            scrape_loop(predictor, push_fn, status_fn)
+            scrape_loop(predictor, push_fn, status_fn, reset_event)
         except KeyboardInterrupt:
             status_fn("Bot stopped by user.")
             break
@@ -50,13 +54,15 @@ def scrape_loop_with_retry(predictor, push_fn, status_fn):
             status_fn(f"Disconnected: {err}. Reconnecting in 5s...")
             time.sleep(5)
 
-def scrape_loop(predictor, push_fn, status_fn):
+
+# ─── Main scrape loop ─────────────────────────────────────────────────────────
+def scrape_loop(predictor, push_fn, status_fn, reset_event=None):
     from playwright.sync_api import sync_playwright
 
     status_fn("Chrome debug session detected! Connecting...")
 
     with sync_playwright() as pw:
-        # --- Connect to running Chrome via CDP ---
+        # Connect to running Chrome via CDP
         try:
             browser = pw.chromium.connect_over_cdp(f"http://localhost:{PORT}")
         except Exception as e:
@@ -71,7 +77,7 @@ def scrape_loop(predictor, push_fn, status_fn):
             time.sleep(5)
             return
 
-        # --- Wait for Aviator tab to be opened by user ---
+        # ── Wait for Aviator tab ─────────────────────────────────────────────
         page = None
         while True:
             try:
@@ -83,10 +89,11 @@ def scrape_loop(predictor, push_fn, status_fn):
             for p in pages:
                 try:
                     url = p.url
+                    # FIX: more specific URL check to avoid wrong Spribe games
                     if (
-                        "spribe-in-aviator-insta" in url
-                        or "aviator-next.spribegaming" in url
-                        or "spribe" in url.lower()
+                        "spribe-in-aviator" in url.lower()
+                        or "aviator-next.spribegaming" in url.lower()
+                        or ("spribe" in url.lower() and "aviator" in url.lower())
                     ):
                         page = p
                         status_fn("Aviator game tab detected!")
@@ -103,7 +110,7 @@ def scrape_loop(predictor, push_fn, status_fn):
             )
             time.sleep(5)
 
-        # --- Auto-click Play button if iframe not yet loaded ---
+        # ── Auto-click Play button if needed ─────────────────────────────────
         if not _find_frame(page):
             status_fn("Looking for Play button...")
             try:
@@ -120,7 +127,7 @@ def scrape_loop(predictor, push_fn, status_fn):
             except Exception as e:
                 status_fn(f"Play button scan error: {str(e)[:50]}")
 
-        # --- Wait for game iframe (up to 60s) ---
+        # ── Wait for game iframe ──────────────────────────────────────────────
         frame = None
         for i in range(30):
             try:
@@ -140,28 +147,37 @@ def scrape_loop(predictor, push_fn, status_fn):
             time.sleep(5)
             return
 
-        # --- Detect working data selector ---
+        # ── Detect primary working selector ──────────────────────────────────
         time.sleep(3)
         selector = _find_selector(frame)
+        using_fallback = selector is None
         if selector:
             status_fn("LIVE data found! Predictions starting!")
         else:
             selector = ".payouts-block .payout"
             status_fn("Tracking active (fallback selector).")
 
-        # --- Live prediction loop ---
-        last_history = []
-        last_mult = None
+        # ── Live prediction loop ──────────────────────────────────────────────
+        last_history     = []
+        last_mult        = None
         consecutive_empty = 0
+        frame_miss_count  = 0          # FIX: track frame health
 
         while True:
             try:
+                # FIX: honour reset signal from clear_history API
+                if reset_event is not None and reset_event.is_set():
+                    last_history = []
+                    last_mult    = None
+                    reset_event.clear()
+                    status_fn("History cleared. Resuming tracking...")
+
                 elements = frame.locator(selector).all()
-                current = []
+                current  = []
                 for el in elements:
                     try:
                         txt = el.text_content(timeout=1000)
-                        v = _parse(txt)
+                        v   = _parse(txt)
                         if v is not None:
                             current.append(v)
                     except Exception:
@@ -169,26 +185,24 @@ def scrape_loop(predictor, push_fn, status_fn):
 
                 if current:
                     consecutive_empty = 0
+                    frame_miss_count  = 0
                     if not last_history:
-                        # First batch of data
+                        # First batch of data — seed history
                         last_history = current
                         for v in reversed(current[:30]):
                             predictor.add(v)
                         last_mult = current[0]
                         predictor.save_history()
                     else:
-                        # Detect new rounds since last read
-                        new_rounds = []
-                        for v in current:
-                            if v == last_history[0]:
-                                break
-                            new_rounds.append(v)
+                        # FIX: sequence-overlap detection (handles identical values)
+                        new_count = _detect_new_rounds(current, last_history)
+                        new_rounds = current[:new_count]
 
                         if new_rounds:
                             for v in reversed(new_rounds):
                                 predictor.add(v)
                             last_history = current
-                            last_mult = new_rounds[0]
+                            last_mult    = new_rounds[0]
                             predictor.save_history()
 
                     pred = predictor.predict()
@@ -197,17 +211,25 @@ def scrape_loop(predictor, push_fn, status_fn):
                         predictor.get_history_list(),
                         last_mult,
                         predictor.round_num,
-                        "Live",
+                        "Live" if not using_fallback else "Live (fallback)",
                     )
+
                 else:
                     consecutive_empty += 1
-                    # If we see 30+ consecutive empty reads, selector may have broken
-                    if consecutive_empty == 30:
-                        status_fn("No data from selector. Trying to re-detect...")
+                    frame_miss_count  += 1
+
+                    # After 30 empty reads — try re-detecting selector AND frame
+                    if consecutive_empty >= 30:
+                        status_fn("No data. Re-detecting frame & selector...")
+                        # FIX: re-run _find_frame in case iframe reloaded
+                        new_frame = _find_frame(page)
+                        if new_frame:
+                            frame = new_frame
                         new_sel = _find_selector(frame)
-                        if new_sel and new_sel != selector:
-                            selector = new_sel
-                            status_fn(f"Switched to selector: {selector}")
+                        if new_sel:
+                            selector      = new_sel
+                            using_fallback = False
+                            status_fn(f"Recovered! Using selector: {selector}")
                         consecutive_empty = 0
 
                 time.sleep(1.5)
@@ -219,20 +241,39 @@ def scrape_loop(predictor, push_fn, status_fn):
                 err = str(e)[:60]
                 status_fn(f"Tracking error: {err}")
                 time.sleep(3)
-                # Check if page connection is still alive
                 try:
                     _ = page.url
                 except Exception:
-                    status_fn("Page closed or tab navigated away. Reconnecting...")
+                    status_fn("Page closed. Reconnecting...")
                     raise RuntimeError("Page closed - need reconnect")
 
 
-# ===== HELPERS =====
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _detect_new_rounds(current, last_history):
+    """
+    Sequence-overlap detection.
+    Returns how many items at the TOP of 'current' are new since 'last_history'.
+    Handles identical consecutive round values correctly.
+    """
+    if not last_history:
+        return len(current)
+    # For each position i, compare current[i:i+k] vs last_history[0:k]
+    # k adapts to available elements so the comparison always works
+    for i in range(len(current)):
+        remaining = len(current) - i
+        k = min(3, remaining, len(last_history))
+        if k == 0:
+            break
+        if current[i : i + k] == last_history[:k]:
+            return i
+    # No overlap found - treat up to 10 as new to avoid spam
+    return min(len(current), 10)
+
 
 def _find_frame(page):
-    """Find the Aviator game iframe inside the page."""
+    """Find the Aviator game iframe by checking for known game elements."""
     try:
-        # Look for a frame containing payouts-block or stats-list or bubble-multiplier
         for f in page.frames:
             try:
                 if (
@@ -247,11 +288,12 @@ def _find_frame(page):
         pass
     return None
 
+
 def _find_selector(frame):
-    """Try each known selector and return the first one that yields numeric data."""
+    """Try each known selector; return first one yielding >= 2 valid values."""
     for sel in GAME_SELECTORS:
         try:
-            els = frame.locator(sel).all()
+            els   = frame.locator(sel).all()
             valid = 0
             for el in els[:5]:
                 try:
@@ -266,12 +308,12 @@ def _find_selector(frame):
             continue
     return None
 
+
 def _parse(txt):
-    """Parse a multiplier string like '2.35x' -> 2.35. Returns None on failure."""
+    """Parse '2.35x' -> 2.35. Returns None on failure."""
     try:
         cleaned = txt.strip().replace("x", "").replace(",", ".").replace(" ", "")
         v = float(cleaned)
-        # Sanity check: Aviator multipliers are always >= 1.00
         if v >= 1.0:
             return v
     except Exception:

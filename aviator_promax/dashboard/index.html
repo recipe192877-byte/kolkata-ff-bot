@@ -9,26 +9,20 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #050510;
-    --bg2: #0a0a20;
+    --bg: #050510; --bg2: #0a0a20;
     --card: rgba(255,255,255,0.04);
     --border: rgba(0,255,200,0.15);
-    --cyan: #00ffc8;
-    --green: #00ff88;
-    --red: #ff4466;
-    --yellow: #ffd700;
-    --white: #e8f0ff;
-    --dim: #7080a0;
+    --cyan: #00ffc8; --green: #00ff88;
+    --red: #ff4466; --yellow: #ffd700;
+    --white: #e8f0ff; --dim: #7080a0;
     --glow-cyan: 0 0 20px rgba(0,255,200,0.4);
     --glow-green: 0 0 20px rgba(0,255,136,0.4);
     --glow-red: 0 0 20px rgba(255,68,102,0.4);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
-    background: var(--bg);
-    color: var(--white);
-    font-family: 'Inter', sans-serif;
-    min-height: 100vh;
+    background: var(--bg); color: var(--white);
+    font-family: 'Inter', sans-serif; min-height:100vh;
     background-image:
       radial-gradient(ellipse at 20% 20%, rgba(0,255,200,0.05) 0%, transparent 50%),
       radial-gradient(ellipse at 80% 80%, rgba(100,0,255,0.05) 0%, transparent 50%);
@@ -36,273 +30,203 @@
 
   /* HEADER */
   .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 18px 32px;
-    background: rgba(0,255,200,0.03);
-    border-bottom: 1px solid var(--border);
-    backdrop-filter: blur(10px);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px;
+    background:rgba(0,255,200,0.03);
+    border-bottom:1px solid var(--border);
+    backdrop-filter:blur(10px); flex-wrap:wrap; gap:10px;
   }
   .logo {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.4rem;
-    font-weight: 900;
-    color: var(--cyan);
-    text-shadow: var(--glow-cyan);
-    letter-spacing: 2px;
+    font-family:'Orbitron',sans-serif; font-size:1.3rem; font-weight:900;
+    color:var(--cyan); text-shadow:var(--glow-cyan); letter-spacing:2px;
   }
-  .logo span { color: var(--white); font-weight: 400; }
+  .logo span { color:var(--white); font-weight:400; }
+  .header-right { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .status-badge {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 0.8rem; color: var(--dim);
-    background: rgba(255,255,255,0.05);
-    padding: 6px 14px; border-radius: 50px;
-    border: 1px solid var(--border);
+    display:flex; align-items:center; gap:8px; font-size:0.78rem; color:var(--dim);
+    background:rgba(255,255,255,0.05); padding:6px 14px; border-radius:50px;
+    border:1px solid var(--border);
   }
   .status-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--green);
-    box-shadow: var(--glow-green);
-    animation: pulse 1.5s infinite;
+    width:8px; height:8px; border-radius:50%; background:var(--green);
+    box-shadow:var(--glow-green); animation:pulse 1.5s infinite; flex-shrink:0;
   }
-  .sound-btn {
-    cursor: pointer; background: rgba(255,255,255,0.05);
-    border: 1px solid var(--border); color: var(--white);
-    padding: 6px 14px; border-radius: 50px; font-size: 0.8rem;
-    transition: all 0.2s;
+  .round-badge {
+    font-size:0.72rem; color:var(--dim);
+    background:rgba(255,255,255,0.05); padding:5px 12px; border-radius:50px;
+    border:1px solid var(--border);
   }
-  .sound-btn:hover { background: rgba(0,255,200,0.1); }
-  .reset-btn {
-    cursor: pointer; background: rgba(255,255,255,0.05);
-    border: 1px solid var(--border); color: var(--white);
-    padding: 6px 14px; border-radius: 50px; font-size: 0.8rem;
-    transition: all 0.2s;
+  .hdr-btn {
+    cursor:pointer; background:rgba(255,255,255,0.05);
+    border:1px solid var(--border); color:var(--white);
+    padding:6px 14px; border-radius:50px; font-size:0.78rem;
+    transition:all 0.2s; white-space:nowrap;
   }
-  .reset-btn:hover { background: rgba(255,68,102,0.1); border-color: rgba(255,68,102,0.4); color: #ff4466; }
+  .hdr-btn:hover { background:rgba(0,255,200,0.1); }
+  .hdr-btn.danger:hover { background:rgba(255,68,102,0.1); border-color:rgba(255,68,102,0.4); color:#ff4466; }
 
   /* MAIN GRID */
   .main {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: auto auto auto;
-    gap: 16px;
-    padding: 20px 28px;
-    max-width: 1400px;
-    margin: 0 auto;
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:14px; padding:18px 24px;
+    max-width:1400px; margin:0 auto;
   }
 
-  /* GLASS CARD */
+  /* CARD */
   .card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px;
-    backdrop-filter: blur(10px);
-    position: relative;
-    overflow: hidden;
+    background:var(--card); border:1px solid var(--border);
+    border-radius:16px; padding:18px; backdrop-filter:blur(10px);
+    position:relative; overflow:hidden;
   }
   .card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
-    opacity: 0.5;
+    content:''; position:absolute; top:0; left:0; right:0; height:1px;
+    background:linear-gradient(90deg,transparent,var(--cyan),transparent); opacity:0.5;
   }
   .card-title {
-    font-size: 0.7rem; font-weight: 600; letter-spacing: 2px;
-    color: var(--dim); text-transform: uppercase; margin-bottom: 14px;
+    font-size:0.68rem; font-weight:600; letter-spacing:2px;
+    color:var(--dim); text-transform:uppercase; margin-bottom:12px;
   }
 
   /* LAST ROUND */
-  .last-round { grid-column: 1; }
+  .last-round { text-align:center; }
   .mult-display {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 3.5rem; font-weight: 900;
-    text-align: center; margin: 8px 0;
-    transition: all 0.4s;
+    font-family:'Orbitron',sans-serif; font-size:3.2rem; font-weight:900;
+    line-height:1; margin:8px 0;
   }
-  .mult-display.green { color: var(--green); text-shadow: var(--glow-green); }
-  .mult-display.red   { color: var(--red);   text-shadow: var(--glow-red); }
-  .mult-display.cyan  { color: var(--cyan);  text-shadow: var(--glow-cyan); }
-  .round-label { text-align: center; color: var(--dim); font-size: 0.75rem; }
+  .mult-display.cyan  { color:var(--cyan);   text-shadow:var(--glow-cyan); }
+  .mult-display.green { color:var(--green);  text-shadow:var(--glow-green); }
+  .mult-display.red   { color:var(--red);    text-shadow:var(--glow-red); }
+  .round-label { font-size:0.72rem; color:var(--dim); }
 
   /* PREDICTION */
-  .prediction { grid-column: 2; }
   .pred-action {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.5rem; font-weight: 700;
-    text-align: center; margin: 6px 0;
-    transition: all 0.4s;
+    font-family:'Orbitron',sans-serif; font-size:1.6rem; font-weight:900;
+    text-align:center; padding:10px; border-radius:10px; margin-bottom:10px;
+    transition:all 0.4s;
   }
-  .pred-action.bet    { color: var(--green); text-shadow: var(--glow-green); }
-  .pred-action.safe   { color: var(--cyan);  text-shadow: var(--glow-cyan); }
-  .pred-action.skip   { color: var(--red);   text-shadow: var(--glow-red); }
-  .pred-action.wait   { color: var(--yellow); }
-  .pred-action.neutral{ color: var(--white); }
+  .pred-action.bet     { color:var(--green);  background:rgba(0,255,136,0.12); border:1px solid rgba(0,255,136,0.3); }
+  .pred-action.safe    { color:var(--cyan);   background:rgba(0,255,200,0.10); border:1px solid rgba(0,255,200,0.3); }
+  .pred-action.wait    { color:var(--yellow); background:rgba(255,215,0,0.10);  border:1px solid rgba(255,215,0,0.3); }
+  .pred-action.skip    { color:var(--red);    background:rgba(255,68,102,0.12); border:1px solid rgba(255,68,102,0.3); }
+  .pred-action.neutral { color:var(--white);  background:rgba(255,255,255,0.06); border:1px solid var(--border); }
+  .cashout-label { font-size:0.8rem; color:var(--dim); text-align:center; margin-bottom:10px; }
+  .cashout-label span { color:var(--cyan); font-weight:700; font-size:1rem; }
+  .conf-bar-wrap { margin-bottom:8px; }
+  .conf-bar-label { display:flex; justify-content:space-between; font-size:0.7rem; color:var(--dim); margin-bottom:4px; }
+  .conf-bar-track { background:rgba(255,255,255,0.05); border-radius:4px; height:6px; overflow:hidden; }
+  .conf-bar-fill  { height:100%; background:linear-gradient(90deg,var(--cyan),var(--green)); border-radius:4px; transition:width 0.5s; }
+  .conf-bar-fill.skip { background:linear-gradient(90deg,var(--red),#ff8866); }
+  .reason-text { font-size:0.72rem; color:var(--dim); text-align:center; min-height:18px; }
 
-  .cashout-label {
-    text-align: center; font-size: 1.1rem;
-    color: var(--yellow); font-weight: 600;
-    margin: 4px 0 10px;
-  }
-  .reason-text {
-    font-size: 0.78rem; color: var(--dim);
-    text-align: center; line-height: 1.5;
-    background: rgba(255,255,255,0.03);
-    padding: 8px; border-radius: 8px;
-  }
+  /* STATS GRID */
+  .stats-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+  .stat-item { text-align:center; background:rgba(255,255,255,0.03); border-radius:10px; padding:10px 6px; border:1px solid rgba(255,255,255,0.05); }
+  .stat-val { font-family:'Orbitron',sans-serif; font-size:1.2rem; font-weight:700; color:var(--cyan); }
+  .stat-lbl { font-size:0.6rem; color:var(--dim); margin-top:3px; letter-spacing:1px; }
+  .band-row { display:flex; gap:6px; margin-top:10px; }
+  .band-item { flex:1; border-radius:8px; padding:8px 4px; text-align:center; }
+  .band-pct  { font-family:'Orbitron',sans-serif; font-size:0.95rem; font-weight:700; }
+  .band-lbl  { font-size:0.58rem; color:var(--dim); margin-top:2px; }
+  .band-b1   { background:rgba(255,68,102,0.1);  border:1px solid rgba(255,68,102,0.2); }
+  .band-b2   { background:rgba(255,215,0,0.1);   border:1px solid rgba(255,215,0,0.2); }
+  .band-b3   { background:rgba(0,255,136,0.1);   border:1px solid rgba(0,255,136,0.2); }
+  .band-b4   { background:rgba(0,255,200,0.1);   border:1px solid rgba(0,255,200,0.2); }
 
-  /* CONFIDENCE METER */
-  .conf-bar-wrap { margin: 12px 0 4px; }
-  .conf-bar-label {
-    display: flex; justify-content: space-between;
-    font-size: 0.72rem; margin-bottom: 6px;
+  /* ACCURACY CARD */
+  .accuracy-big {
+    font-family:'Orbitron',sans-serif; font-size:2.8rem; font-weight:900;
+    text-align:center; color:var(--green); text-shadow:var(--glow-green);
+    margin:8px 0 4px;
   }
-  .conf-bar-track {
-    height: 10px; border-radius: 99px;
-    background: rgba(255,255,255,0.08);
-    overflow: hidden;
-  }
-  .conf-bar-fill {
-    height: 100%; border-radius: 99px;
-    transition: width 0.6s ease, background 0.4s;
-    background: linear-gradient(90deg, var(--cyan), var(--green));
-  }
-  .conf-bar-fill.skip { background: linear-gradient(90deg, var(--red), #ff8844); }
+  .accuracy-sub { font-size:0.7rem; color:var(--dim); text-align:center; }
+  .acc-row { display:flex; justify-content:space-around; margin-top:14px; }
+  .acc-item { text-align:center; }
+  .acc-val { font-family:'Orbitron',sans-serif; font-size:1.1rem; font-weight:700; color:var(--cyan); }
+  .acc-lbl { font-size:0.6rem; color:var(--dim); margin-top:2px; }
 
-  /* STATS */
-  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .stat-item {
-    background: rgba(255,255,255,0.03);
-    border-radius: 10px; padding: 10px;
-    text-align: center;
-    border: 1px solid rgba(255,255,255,0.05);
-  }
-  .stat-val {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.3rem; font-weight: 700; color: var(--cyan);
-  }
-  .stat-lbl { font-size: 0.65rem; color: var(--dim); margin-top: 2px; }
+  /* SESSION CARD */
+  .sess-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .sess-item { text-align:center; background:rgba(255,255,255,0.03); border-radius:10px; padding:10px 6px; border:1px solid rgba(255,255,255,0.05); }
+  .sess-val { font-family:'Orbitron',sans-serif; font-size:1.1rem; font-weight:700; color:var(--yellow); }
+  .sess-lbl { font-size:0.6rem; color:var(--dim); margin-top:3px; }
 
   /* CHART */
-  .chart-card { grid-column: 1 / -1; }
-  .chart-wrap { height: 180px; position: relative; }
+  .chart-card { grid-column:1 / -1; }
+  .chart-wrap { height:180px; }
 
-  /* ALGO VOTES */
-  .votes-card { grid-column: 1; }
-  .vote-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
-    font-size: 0.78rem;
-  }
-  .vote-row:last-child { border-bottom: none; }
-  .vote-name { color: var(--dim); font-weight: 600; min-width: 80px; }
-  .vote-bar-track { flex: 1; height: 6px; background: rgba(255,255,255,0.08); border-radius: 99px; margin: 0 10px; overflow:hidden; }
-  .vote-bar-fill { height: 100%; border-radius: 99px; transition: width 0.5s; }
-  .vote-score { font-family: 'Orbitron', sans-serif; font-size: 0.7rem; min-width: 24px; text-align: right; }
+  /* VOTES */
+  .vote-row { display:flex; align-items:center; gap:8px; margin-bottom:3px; }
+  .vote-name { font-size:0.68rem; color:var(--dim); width:70px; flex-shrink:0; }
+  .vote-bar-track { flex:1; background:rgba(255,255,255,0.06); border-radius:3px; height:5px; overflow:hidden; }
+  .vote-bar-fill  { height:100%; border-radius:3px; transition:width 0.4s; }
+  .vote-score { font-size:0.7rem; font-weight:700; width:24px; text-align:right; }
+  .vote-reason-text { font-size:0.6rem; color:var(--dim); padding:0 0 8px 78px; line-height:1.4; }
 
   /* HISTORY */
-  .history-card { grid-column: 2 / -1; }
-  .hist-scroll { max-height: 200px; overflow-y: auto; }
-  .hist-scroll::-webkit-scrollbar { width: 4px; }
-  .hist-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-  .hist-grid { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+  .history-card { grid-column:1 / -1; }
+  .hist-scroll { overflow-x:auto; }
+  .hist-grid { display:flex; flex-wrap:wrap; gap:5px; padding:4px 0; }
   .hist-badge {
-    font-family: 'Orbitron', sans-serif;
-    font-size: 0.7rem; font-weight: 700;
-    padding: 4px 10px; border-radius: 6px;
-    transition: all 0.3s;
+    font-family:'Orbitron',sans-serif; font-size:0.68rem; font-weight:700;
+    padding:4px 9px; border-radius:6px; transition:all 0.3s; cursor:default;
+    white-space:nowrap;
   }
-  .hist-badge.b1 { background: rgba(255,68,102,0.2);  color: var(--red);    border: 1px solid rgba(255,68,102,0.3); }
-  .hist-badge.b2 { background: rgba(255,215,0,0.15);  color: var(--yellow); border: 1px solid rgba(255,215,0,0.3); }
-  .hist-badge.b3 { background: rgba(0,255,136,0.15);  color: var(--green);  border: 1px solid rgba(0,255,136,0.3); }
-  .hist-badge.b4 { background: rgba(0,255,200,0.15);  color: var(--cyan);   border: 1px solid rgba(0,255,200,0.3); box-shadow: var(--glow-cyan); }
-  .hist-badge.manual { outline: 1px dashed rgba(255,215,0,0.5); }
-  .hist-badge.new { animation: pop 0.4s ease; }
+  .hist-badge.b1 { background:rgba(255,68,102,0.2);  color:var(--red);    border:1px solid rgba(255,68,102,0.3); }
+  .hist-badge.b2 { background:rgba(255,215,0,0.15);  color:var(--yellow); border:1px solid rgba(255,215,0,0.3); }
+  .hist-badge.b3 { background:rgba(0,255,136,0.15);  color:var(--green);  border:1px solid rgba(0,255,136,0.3); }
+  .hist-badge.b4 { background:rgba(0,255,200,0.15);  color:var(--cyan);   border:1px solid rgba(0,255,200,0.3); box-shadow:var(--glow-cyan); }
+  .hist-badge.new { animation:pop 0.4s ease; }
 
-  /* ===== MANUAL ENTRY CARD ===== */
-  .manual-card { grid-column: 1 / -1; }
-  .manual-inner {
-    display: flex; flex-wrap: wrap; gap: 12px;
-    align-items: flex-end;
-  }
-  .manual-field {
-    display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px;
-  }
-  .manual-field label {
-    font-size: 0.7rem; color: var(--dim); letter-spacing: 1px; text-transform: uppercase;
-  }
+  /* MANUAL ENTRY */
+  .manual-card { grid-column:1 / -1; }
+  .manual-inner { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+  .manual-field { display:flex; flex-direction:column; gap:6px; flex:1; min-width:200px; }
+  .manual-field label { font-size:0.68rem; color:var(--dim); letter-spacing:1px; text-transform:uppercase; }
   .manual-input {
-    background: rgba(0,255,200,0.05);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    color: var(--white);
-    font-family: 'Orbitron', sans-serif;
-    font-size: 1.2rem;
-    font-weight: 700;
-    padding: 10px 16px;
-    outline: none;
-    width: 100%;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    background:rgba(0,255,200,0.05); border:1px solid var(--border);
+    border-radius:10px; color:var(--white);
+    font-family:'Orbitron',sans-serif; font-size:1.1rem; font-weight:700;
+    padding:10px 16px; outline:none; width:100%;
+    transition:border-color 0.2s, box-shadow 0.2s;
   }
-  .manual-input:focus {
-    border-color: var(--cyan);
-    box-shadow: 0 0 12px rgba(0,255,200,0.2);
-  }
-  .manual-input::placeholder { color: rgba(255,255,255,0.2); font-size: 0.85rem; }
+  .manual-input:focus { border-color:var(--cyan); box-shadow:0 0 12px rgba(0,255,200,0.2); }
+  .manual-input::placeholder { color:rgba(255,255,255,0.2); font-size:0.85rem; }
   .manual-btn {
-    background: linear-gradient(135deg, #00c89a, #00ffc8);
-    border: none; border-radius: 10px;
-    color: #050510; font-family: 'Orbitron', sans-serif;
-    font-size: 0.85rem; font-weight: 700;
-    padding: 11px 28px; cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.2s;
-    letter-spacing: 1px; white-space: nowrap;
+    background:linear-gradient(135deg,#00c89a,#00ffc8); border:none; border-radius:10px;
+    color:#050510; font-family:'Orbitron',sans-serif; font-size:0.82rem; font-weight:700;
+    padding:11px 26px; cursor:pointer; transition:transform 0.15s, box-shadow 0.2s;
+    letter-spacing:1px; white-space:nowrap;
   }
-  .manual-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,255,200,0.35); }
-  .manual-btn:active { transform: translateY(0); }
-  .manual-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-  .manual-feedback {
-    font-size: 0.8rem; margin-top: 8px; min-height: 20px;
-    transition: all 0.3s;
-  }
-  .manual-feedback.ok   { color: var(--green); }
-  .manual-feedback.err  { color: var(--red); }
-  .manual-recent {
-    display: flex; flex-wrap: wrap; gap: 6px;
-    margin-top: 10px;
-  }
+  .manual-btn:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,255,200,0.35); }
+  .manual-btn:active { transform:translateY(0); }
+  .manual-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+  .manual-feedback { font-size:0.78rem; margin-top:8px; min-height:18px; transition:all 0.3s; }
+  .manual-feedback.ok  { color:var(--green); }
+  .manual-feedback.err { color:var(--red); }
+  .manual-recent { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
   .manual-tag {
-    font-size: 0.68rem; font-family: 'Orbitron', sans-serif;
-    background: rgba(255,215,0,0.1); border: 1px dashed rgba(255,215,0,0.4);
-    color: var(--yellow); border-radius: 6px; padding: 3px 8px;
+    font-size:0.66rem; font-family:'Orbitron',sans-serif;
+    background:rgba(255,215,0,0.1); border:1px dashed rgba(255,215,0,0.4);
+    color:var(--yellow); border-radius:6px; padding:3px 7px;
   }
 
   /* ANIMATIONS */
-  @keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.8); }
-  }
-  @keyframes pop {
-    0% { transform: scale(1.4); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
-  }
-  @keyframes flash {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
-  .flash { animation: flash 0.5s ease 2; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+  @keyframes pop   { 0%{transform:scale(1.4);opacity:0} 100%{transform:scale(1);opacity:1} }
+  @keyframes flash { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .flash { animation:flash 0.5s ease 2; }
 
-  /* DISTRIBUTION BANDS */
-  .band-row { display: flex; gap: 6px; margin-top: 8px; }
-  .band-item { flex: 1; border-radius: 8px; padding: 8px 4px; text-align: center; }
-  .band-pct { font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 700; }
-  .band-lbl { font-size: 0.6rem; color: var(--dim); margin-top: 2px; }
-  .band-b1 { background: rgba(255,68,102,0.1); border: 1px solid rgba(255,68,102,0.2); }
-  .band-b2 { background: rgba(255,215,0,0.1);  border: 1px solid rgba(255,215,0,0.2); }
-  .band-b3 { background: rgba(0,255,136,0.1);  border: 1px solid rgba(0,255,136,0.2); }
-  .band-b4 { background: rgba(0,255,200,0.1);  border: 1px solid rgba(0,255,200,0.2); }
+  /* MOBILE */
+  @media(max-width:900px){
+    .main { grid-template-columns:1fr 1fr; padding:12px; }
+    .chart-card, .history-card, .manual-card { grid-column:1 / -1; }
+  }
+  @media(max-width:580px){
+    .main { grid-template-columns:1fr; padding:10px; }
+    .mult-display { font-size:2.5rem; }
+    .pred-action { font-size:1.2rem; }
+  }
 </style>
 </head>
 <body>
@@ -314,10 +238,10 @@
     <div class="status-dot" id="statusDot"></div>
     <span id="statusText">Connecting...</span>
   </div>
-  <div style="display:flex;gap:10px;align-items:center">
-    <span style="font-size:0.75rem;color:var(--dim)">Round #<span id="roundNum">0</span></span>
-    <button class="sound-btn" onclick="toggleSound()" id="soundBtn">&#128266; Sound ON</button>
-    <button class="reset-btn" onclick="clearHistory()" id="resetBtn">&#128465; Clear History</button>
+  <div class="header-right">
+    <div class="round-badge">Round #<span id="roundNum">0</span></div>
+    <button class="hdr-btn" onclick="toggleSound()" id="soundBtn">&#128266; Sound ON</button>
+    <button class="hdr-btn danger" onclick="clearHistory()" id="resetBtn">&#128465; Clear History</button>
   </div>
 </div>
 
@@ -326,8 +250,8 @@
 
   <!-- LAST ROUND -->
   <div class="card last-round">
-    <div class="card-title">Last Round</div>
-    <div class="mult-display cyan" id="lastMult">-</div>
+    <div class="card-title">&#128308; Last Round</div>
+    <div class="mult-display" id="lastMult">-</div>
     <div class="round-label" id="lastRoundLbl">Waiting for data...</div>
   </div>
 
@@ -345,31 +269,19 @@
         <div class="conf-bar-fill" id="confBar" style="width:0%"></div>
       </div>
     </div>
-    <div class="reason-text" id="predReason">Initializing prediction engine...</div>
+    <div class="reason-text" id="predReason">Initializing...</div>
   </div>
 
-  <!-- STATS -->
+  <!-- LIVE STATS -->
   <div class="card">
     <div class="card-title">&#128202; Live Statistics</div>
     <div class="stats-grid">
-      <div class="stat-item">
-        <div class="stat-val" id="statTotal">0</div>
-        <div class="stat-lbl">Total Rounds</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-val" id="statAvg">-</div>
-        <div class="stat-lbl">Overall Avg</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-val" id="statAvg10">-</div>
-        <div class="stat-lbl">Last 10 Avg</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-val" id="statCrash">-</div>
-        <div class="stat-lbl">Crash Rate</div>
-      </div>
+      <div class="stat-item"><div class="stat-val" id="statTotal">0</div><div class="stat-lbl">Total Rounds</div></div>
+      <div class="stat-item"><div class="stat-val" id="statAvg">-</div><div class="stat-lbl">Overall Avg</div></div>
+      <div class="stat-item"><div class="stat-val" id="statAvg10">-</div><div class="stat-lbl">Last 10 Avg</div></div>
+      <div class="stat-item"><div class="stat-val" id="statCrash">-</div><div class="stat-lbl">Crash Rate</div></div>
     </div>
-    <div class="band-row" style="margin-top:12px">
+    <div class="band-row">
       <div class="band-item band-b1"><div class="band-pct" id="b1">0%</div><div class="band-lbl">&lt;1.5x</div></div>
       <div class="band-item band-b2"><div class="band-pct" id="b2">0%</div><div class="band-lbl">1.5-2x</div></div>
       <div class="band-item band-b3"><div class="band-pct" id="b3">0%</div><div class="band-lbl">2-5x</div></div>
@@ -377,371 +289,345 @@
     </div>
   </div>
 
+  <!-- ACCURACY CARD -->
+  <div class="card">
+    <div class="card-title">&#127919; Prediction Accuracy</div>
+    <div class="accuracy-big" id="accPct">-</div>
+    <div class="accuracy-sub" id="accSub">No predictions yet</div>
+    <div class="acc-row">
+      <div class="acc-item"><div class="acc-val" id="accCorrect">0</div><div class="acc-lbl">Correct</div></div>
+      <div class="acc-item"><div class="acc-val" id="accTotal">0</div><div class="acc-lbl">Total</div></div>
+      <div class="acc-item"><div class="acc-val" id="accWrong">0</div><div class="acc-lbl">Wrong</div></div>
+    </div>
+  </div>
+
+  <!-- SESSION CARD -->
+  <div class="card">
+    <div class="card-title">&#9201; Session Summary</div>
+    <div class="sess-grid">
+      <div class="sess-item"><div class="sess-val" id="sessRounds">0</div><div class="sess-lbl">Rounds</div></div>
+      <div class="sess-item"><div class="sess-val" id="sessStart">-</div><div class="sess-lbl">Started</div></div>
+      <div class="sess-item"><div class="sess-val" id="sessMax" style="color:var(--cyan)">-</div><div class="sess-lbl">Best Round</div></div>
+      <div class="sess-item"><div class="sess-val" id="sessMin" style="color:var(--red)">-</div><div class="sess-lbl">Lowest Round</div></div>
+    </div>
+  </div>
+
   <!-- CHART -->
   <div class="card chart-card">
     <div class="card-title">&#128200; Multiplier History (Live)</div>
-    <div class="chart-wrap">
-      <canvas id="multChart"></canvas>
-    </div>
+    <div class="chart-wrap"><canvas id="multChart"></canvas></div>
   </div>
 
   <!-- ALGO VOTES -->
   <div class="card votes-card">
     <div class="card-title">&#129302; Algorithm Votes</div>
-    <div id="votesContainer">
-      <div style="color:var(--dim);font-size:0.8rem">Waiting for data...</div>
-    </div>
+    <div id="votesContainer"><div style="color:var(--dim);font-size:0.8rem">Waiting for data...</div></div>
   </div>
 
   <!-- HISTORY -->
-  <div class="card history-card">
-    <div class="card-title">&#128337; Round History</div>
-    <div class="hist-scroll">
-      <div class="hist-grid" id="histGrid"></div>
-    </div>
+  <div class="card history-card" style="grid-column:2 / -1;">
+    <div class="card-title">&#128337; Round History (newest first)</div>
+    <div class="hist-scroll"><div class="hist-grid" id="histGrid"></div></div>
   </div>
 
-  <!-- ===== MANUAL RESULT ENTRY ===== -->
+  <!-- MANUAL ENTRY -->
   <div class="card manual-card">
     <div class="card-title">&#9999;&#65039; Manual Result Entry — Type Round Result Yourself</div>
     <div class="manual-inner">
       <div class="manual-field">
         <label for="manualInput">Multiplier Value (e.g. 2.35)</label>
-        <input
-          type="number"
-          id="manualInput"
-          class="manual-input"
-          placeholder="e.g. 1.72 or 5.40"
-          min="1" max="200" step="0.01"
-        >
+        <input type="number" id="manualInput" class="manual-input"
+          placeholder="e.g. 1.72 or 5.40" min="1" max="200" step="0.01">
       </div>
-      <button class="manual-btn" id="manualBtn" onclick="submitManual()">
-        &#9654; ADD RESULT
-      </button>
+      <button class="manual-btn" id="manualBtn" onclick="submitManual()">&#9654; ADD RESULT</button>
     </div>
     <div class="manual-feedback" id="manualFeedback"></div>
     <div style="margin-top:10px;">
-      <div style="font-size:0.65rem;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Recently Added Manually</div>
-      <div class="manual-recent" id="manualRecent">
-        <span style="font-size:0.75rem;color:var(--dim)">None yet</span>
-      </div>
+      <div style="font-size:0.63rem;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Recently Added Manually</div>
+      <div class="manual-recent" id="manualRecent"><span style="font-size:0.72rem;color:var(--dim)">None yet</span></div>
     </div>
   </div>
 
 </div>
 
 <script>
-// ===== CHART SETUP =====
+// ===== CHART =====
 const chart = new Chart(document.getElementById('multChart'), {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [{
-      label: 'Multiplier',
-      data: [],
-      borderColor: '#00ffc8',
-      backgroundColor: 'rgba(0,255,200,0.08)',
-      borderWidth: 2,
-      pointRadius: 3,
+  type:'line',
+  data:{
+    labels:[],
+    datasets:[{
+      label:'Multiplier', data:[],
+      borderColor:'#00ffc8', backgroundColor:'rgba(0,255,200,0.08)',
+      borderWidth:2, pointRadius:3,
       pointBackgroundColor: d => {
         const v = d.raw;
-        return v >= 5 ? '#00ffc8' : v >= 2 ? '#00ff88' : v >= 1.5 ? '#ffd700' : '#ff4466';
+        return v>=5?'#00ffc8':v>=2?'#00ff88':v>=1.5?'#ffd700':'#ff4466';
       },
-      tension: 0.4,
-      fill: true,
+      tension:0.4, fill:true,
     }]
   },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    animation: { duration: 400 },
-    plugins: { legend: { display: false } },
-    scales: {
-      x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7080a0', maxTicksLimit: 10 } },
-      y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#7080a0' }, min: 1 }
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    animation:{duration:400},
+    plugins:{legend:{display:false}},
+    scales:{
+      x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#7080a0',maxTicksLimit:10}},
+      y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#7080a0'},min:1}
     }
   }
 });
 
 // ===== SOUND =====
 let soundOn = true;
-function toggleSound() {
+function toggleSound(){
   soundOn = !soundOn;
   document.getElementById('soundBtn').textContent = soundOn ? '\uD83D\uDD0A Sound ON' : '\uD83D\uDD07 Sound OFF';
 }
-function beep(freq=520, dur=180) {
-  if (!soundOn) return;
-  try {
-    const ac = new AudioContext();
-    const o = ac.createOscillator();
-    const g = ac.createGain();
+function beep(freq=520,dur=180){
+  if(!soundOn) return;
+  try{
+    const ac=new AudioContext(), o=ac.createOscillator(), g=ac.createGain();
     o.connect(g); g.connect(ac.destination);
-    o.frequency.value = freq;
-    g.gain.setValueAtTime(0.3, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur/1000);
-    o.start(); o.stop(ac.currentTime + dur/1000);
-  } catch(e) {}
+    o.frequency.value=freq;
+    g.gain.setValueAtTime(0.3,ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+dur/1000);
+    o.start(); o.stop(ac.currentTime+dur/1000);
+  }catch(e){}
 }
 
 // ===== HELPERS =====
-function multClass(v) {
-  if (v >= 5)   return 'b4';
-  if (v >= 2)   return 'b3';
-  if (v >= 1.5) return 'b2';
-  return 'b1';
+function multClass(v){
+  if(v>=5) return 'b4'; if(v>=2) return 'b3'; if(v>=1.5) return 'b2'; return 'b1';
 }
-function multColorClass(v) {
-  if (v >= 5)  return 'cyan';
-  if (v >= 2)  return 'green';
-  return 'red';
-}
+function multColorClass(v){ return v>=5?'cyan':v>=2?'green':'red'; }
 
-let lastRoundNum = 0;
-let prevSignal = '';
+let lastRoundNum=0, prevSignal='';
 
 // ===== SOCKET.IO =====
 const socket = io();
 
-socket.on('connect', () => {
-  document.getElementById('statusText').textContent = 'Connected';
-  document.getElementById('statusDot').style.background = '#00ff88';
+socket.on('connect', ()=>{
+  document.getElementById('statusText').textContent='Connected';
+  document.getElementById('statusDot').style.background='#00ff88';
 });
-socket.on('disconnect', () => {
-  document.getElementById('statusText').textContent = 'Disconnected';
-  document.getElementById('statusDot').style.background = '#ff4466';
+socket.on('disconnect',()=>{
+  document.getElementById('statusText').textContent='Disconnected';
+  document.getElementById('statusDot').style.cssText='background:#ff4466';
 });
-socket.on('status', data => {
-  document.getElementById('statusText').textContent = data.msg;
-  // Update status dot color based on message
-  const dot = document.getElementById('statusDot');
-  const msg = (data.msg || '').toLowerCase();
-  if (msg.includes('waiting') || msg.includes('connecting')) {
-    dot.style.background = '#ffd700';
-  } else if (msg.includes('live') || msg.includes('found') || msg.includes('starting')) {
-    dot.style.background = '#00ff88';
-  } else if (msg.includes('error') || msg.includes('crash') || msg.includes('lost')) {
-    dot.style.background = '#ff4466';
-  } else {
-    dot.style.background = '#00ffc8';
-  }
+socket.on('status', data=>{
+  const msg=(data.msg||'').toLowerCase();
+  document.getElementById('statusText').textContent=data.msg;
+  const dot=document.getElementById('statusDot');
+  if(msg.includes('waiting')||msg.includes('connecting'))      dot.style.background='#ffd700';
+  else if(msg.includes('fallback'))                             dot.style.background='#ffaa00'; // FIX: amber for fallback
+  else if(msg.includes('live')||msg.includes('found')||msg.includes('starting')) dot.style.background='#00ff88';
+  else if(msg.includes('error')||msg.includes('crash')||msg.includes('lost'))    dot.style.background='#ff4466';
+  else dot.style.background='#00ffc8';
 });
-socket.on('update', data => {
-  updateDashboard(data);
-});
+socket.on('update', data=>{ updateDashboard(data); });
 
 // ===== UPDATE DASHBOARD =====
-function updateDashboard(data) {
-  const pred = data.prediction || {};
-  const stats = pred.stats || {};
-  const hist = data.history || [];
+function updateDashboard(data){
+  const pred=data.prediction||{}, stats=pred.stats||{}, hist=data.history||[];
+  const acc=data.accuracy||{total:0,correct:0,pct:0};
+  const sess=data.session||{rounds:0,start_time:null,max_mult:0,min_mult:999};
 
-  document.getElementById('statusText').textContent = data.status || 'Live';
-  document.getElementById('roundNum').textContent = data.round_num || 0;
+  // Status
+  const statusMsg=(data.status||'Live');
+  document.getElementById('statusText').textContent=statusMsg;
+  document.getElementById('roundNum').textContent=data.round_num||0;
 
-  const lm = data.last_mult;
-  if (lm !== null && lm !== undefined) {
-    const el = document.getElementById('lastMult');
-    el.textContent = lm.toFixed(2) + 'x';
-    el.className = 'mult-display ' + multColorClass(lm);
+  // Last multiplier
+  const lm=data.last_mult;
+  if(lm!==null&&lm!==undefined){
+    const el=document.getElementById('lastMult');
+    el.textContent=lm.toFixed(2)+'x';
+    el.className='mult-display '+multColorClass(lm);
     el.classList.add('flash');
-    setTimeout(() => el.classList.remove('flash'), 600);
-
-    const isNew = (data.round_num || 0) > lastRoundNum;
-    if (isNew) {
-      const src = data.status === 'Manual' ? ' ??' : '';
-      document.getElementById('lastRoundLbl').textContent = `Round #${data.round_num}${src}`;
-      lastRoundNum = data.round_num;
+    setTimeout(()=>el.classList.remove('flash'),600);
+    const isNew=(data.round_num||0)>lastRoundNum;
+    if(isNew){
+      const src=data.status==='Manual'?' \u270F':'';
+      document.getElementById('lastRoundLbl').textContent=`Round #${data.round_num}${src}`;
+      lastRoundNum=data.round_num;
     }
   }
 
-  if (data.round_num === 0) {
-    lastRoundNum = 0;
-    document.getElementById('lastRoundLbl').textContent = 'Waiting for data...';
-    document.getElementById('lastMult').textContent = '-';
-    document.getElementById('lastMult').className = 'mult-display';
+  // Reset on clear
+  if(data.round_num===0){
+    lastRoundNum=0;
+    document.getElementById('lastRoundLbl').textContent='Waiting for data...';
+    document.getElementById('lastMult').textContent='-';
+    document.getElementById('lastMult').className='mult-display';
   }
 
-  const sig = pred.signal || 'neutral';
-  const actEl = document.getElementById('predAction');
-  actEl.textContent = pred.action || 'WATCH';
-  actEl.className = 'pred-action ' + sig;
+  // Prediction
+  const sig=pred.signal||'neutral';
+  const actEl=document.getElementById('predAction');
+  actEl.textContent=pred.action||'WATCH';
+  actEl.className='pred-action '+sig;
+  document.getElementById('predCashout').textContent=pred.cashout||'-';
+  document.getElementById('predReason').textContent=pred.reason||'...';
 
-  document.getElementById('predCashout').textContent = pred.cashout || '-';
-  document.getElementById('predReason').textContent = pred.reason || '...';
+  const conf=pred.confidence||0;
+  document.getElementById('confPct').textContent=conf+'%';
+  document.getElementById('confLabel').textContent=pred.conf_label||'Confidence';
+  const bar=document.getElementById('confBar');
+  bar.style.width=conf+'%';
+  bar.className='conf-bar-fill'+(sig==='skip'?' skip':'');
 
-  const conf = pred.confidence || 0;
-  document.getElementById('confPct').textContent = conf + '%';
-  document.getElementById('confLabel').textContent = pred.conf_label || 'Confidence';
-  const bar = document.getElementById('confBar');
-  bar.style.width = conf + '%';
-  bar.className = 'conf-bar-fill' + (sig === 'skip' ? ' skip' : '');
-
-  if (sig !== prevSignal) {
-    if (sig === 'bet') beep(660, 200);
-    else if (sig === 'skip') beep(220, 300);
-    else if (sig === 'safe') beep(520, 150);
-    prevSignal = sig;
+  if(sig!==prevSignal){
+    if(sig==='bet')  beep(660,200);
+    else if(sig==='skip') beep(220,300);
+    else if(sig==='safe') beep(520,150);
+    prevSignal=sig;
   }
 
-  document.getElementById('statTotal').textContent = stats.total || 0;
-  document.getElementById('statAvg').textContent = stats.avg_all ? stats.avg_all.toFixed(2) + 'x' : '-';
-  document.getElementById('statAvg10').textContent = stats.avg_10 ? stats.avg_10.toFixed(2) + 'x' : '-';
-  document.getElementById('statCrash').textContent = stats.crash_rate ? stats.crash_rate.toFixed(0) + '%' : '-';
-  document.getElementById('b1').textContent = (stats.b1 || 0).toFixed(0) + '%';
-  document.getElementById('b2').textContent = (stats.b2 || 0).toFixed(0) + '%';
-  document.getElementById('b3').textContent = (stats.b3 || 0).toFixed(0) + '%';
-  document.getElementById('b4').textContent = (stats.b4 || 0).toFixed(0) + '%';
+  // Live stats
+  document.getElementById('statTotal').textContent=stats.total||0;
+  document.getElementById('statAvg').textContent=stats.avg_all?stats.avg_all.toFixed(2)+'x':'-';
+  document.getElementById('statAvg10').textContent=stats.avg_10?stats.avg_10.toFixed(2)+'x':'-';
+  document.getElementById('statCrash').textContent=stats.crash_rate?stats.crash_rate.toFixed(0)+'%':'-';
+  document.getElementById('b1').textContent=(stats.b1||0).toFixed(0)+'%';
+  document.getElementById('b2').textContent=(stats.b2||0).toFixed(0)+'%';
+  document.getElementById('b3').textContent=(stats.b3||0).toFixed(0)+'%';
+  document.getElementById('b4').textContent=(stats.b4||0).toFixed(0)+'%';
 
-  const last30 = hist.slice(-30);
-  chart.data.labels = last30.map((_, i) => i + 1);
-  chart.data.datasets[0].data = last30;
-  chart.data.datasets[0].pointBackgroundColor = last30.map(v =>
-    v >= 5 ? '#00ffc8' : v >= 2 ? '#00ff88' : v >= 1.5 ? '#ffd700' : '#ff4466'
+  // Accuracy panel
+  document.getElementById('accPct').textContent=acc.total>0?acc.pct+'%':'-';
+  document.getElementById('accSub').textContent=acc.total>0?`Based on ${acc.total} predictions`:'No predictions yet';
+  document.getElementById('accCorrect').textContent=acc.correct||0;
+  document.getElementById('accTotal').textContent=acc.total||0;
+  document.getElementById('accWrong').textContent=(acc.total||0)-(acc.correct||0);
+  const accEl=document.getElementById('accPct');
+  if(acc.pct>=70) accEl.style.color='var(--green)';
+  else if(acc.pct>=50) accEl.style.color='var(--yellow)';
+  else if(acc.total>0) accEl.style.color='var(--red)';
+
+  // Session panel
+  document.getElementById('sessRounds').textContent=sess.rounds||0;
+  document.getElementById('sessStart').textContent=sess.start_time||'-';
+  document.getElementById('sessMax').textContent=sess.max_mult>0?sess.max_mult.toFixed(2)+'x':'-';
+  document.getElementById('sessMin').textContent=sess.min_mult<999?sess.min_mult.toFixed(2)+'x':'-';
+
+  // Chart
+  const last30=hist.slice(-30);
+  chart.data.labels=last30.map((_,i)=>i+1);
+  chart.data.datasets[0].data=last30;
+  chart.data.datasets[0].pointBackgroundColor=last30.map(v=>
+    v>=5?'#00ffc8':v>=2?'#00ff88':v>=1.5?'#ffd700':'#ff4466'
   );
   chart.update('active');
 
-  const grid = document.getElementById('histGrid');
-  // Rebuild grid only when history length changes (avoids duplication)
-  const renderedCount = parseInt(grid.dataset.renderedCount || '0');
-  if (hist.length === 0) {
-    grid.innerHTML = '';
-    grid.dataset.renderedCount = '0';
-  } else if (hist.length > renderedCount) {
-    const newItems = hist.slice(renderedCount);
-    newItems.forEach(v => {
-      const badge = document.createElement('div');
-      badge.className = 'hist-badge ' + multClass(v) + ' new';
-      badge.textContent = v.toFixed(2) + 'x';
-      grid.insertBefore(badge, grid.firstChild);
-      setTimeout(() => badge.classList.remove('new'), 500);
+  // History grid
+  const grid=document.getElementById('histGrid');
+  const renderedCount=parseInt(grid.dataset.renderedCount||'0');
+  if(hist.length===0){
+    grid.innerHTML=''; grid.dataset.renderedCount='0';
+  } else if(hist.length>renderedCount){
+    const newItems=hist.slice(renderedCount);
+    newItems.forEach(v=>{
+      const badge=document.createElement('div');
+      badge.className='hist-badge '+multClass(v)+' new';
+      badge.textContent=v.toFixed(2)+'x';
+      grid.insertBefore(badge,grid.firstChild);
+      setTimeout(()=>badge.classList.remove('new'),500);
     });
-    grid.dataset.renderedCount = hist.length;
-    while (grid.children.length > 80) grid.removeChild(grid.lastChild);
+    grid.dataset.renderedCount=hist.length;
+    while(grid.children.length>100) grid.removeChild(grid.lastChild);
   }
 
-  const votes = pred.votes || {};
-  const algoNames = Object.keys(votes);
-  if (algoNames.length > 0) {
-    const maxScore = 3;
-    document.getElementById('votesContainer').innerHTML = algoNames.map(name => {
-      const v = votes[name];
-      const score = v.score || 0;
-      const pct = Math.abs(score) / maxScore * 100;
-      const color = score > 0 ? '#00ff88' : score < 0 ? '#ff4466' : '#7080a0';
-      return `
-        <div class="vote-row">
-          <span class="vote-name">${name}</span>
-          <div class="vote-bar-track">
-            <div class="vote-bar-fill" style="width:${pct}%;background:${color}"></div>
-          </div>
-          <span class="vote-score" style="color:${color}">${score > 0 ? '+' : ''}${score}</span>
-        </div>
-        <div style="font-size:0.62rem;color:var(--dim);padding: 0 0 6px 0;line-height:1.4">${v.reason || ''}</div>
-      `;
+  // Votes
+  const votes=pred.votes||{};
+  const algoNames=Object.keys(votes);
+  if(algoNames.length>0){
+    const maxScore=3;
+    document.getElementById('votesContainer').innerHTML=algoNames.map(name=>{
+      const v=votes[name], score=v.score||0;
+      const pct=Math.abs(score)/maxScore*100;
+      const color=score>0?'#00ff88':score<0?'#ff4466':'#7080a0';
+      return `<div class="vote-row">
+        <span class="vote-name">${name}</span>
+        <div class="vote-bar-track"><div class="vote-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span class="vote-score" style="color:${color}">${score>0?'+':''}${score}</span>
+      </div>
+      <div class="vote-reason-text">${v.reason||''}</div>`;
     }).join('');
   }
 }
 
-// ===== MANUAL RESULT SUBMISSION =====
-const manualQueue = [];
-
-function submitManual() {
-  const input = document.getElementById('manualInput');
-  const feedback = document.getElementById('manualFeedback');
-  const btn = document.getElementById('manualBtn');
-  const val = parseFloat(input.value);
-
-  if (isNaN(val) || val < 1.0 || val > 200.0) {
-    feedback.textContent = '\u274C Invalid value. Enter a number between 1.00 and 200.00';
-    feedback.className = 'manual-feedback err';
-    input.focus();
-    return;
+// ===== MANUAL ENTRY =====
+const manualQueue=[];
+function submitManual(){
+  const input=document.getElementById('manualInput');
+  const feedback=document.getElementById('manualFeedback');
+  const btn=document.getElementById('manualBtn');
+  const val=parseFloat(input.value);
+  if(isNaN(val)||val<1.0||val>200.0){
+    feedback.textContent='\u274C Invalid value. Enter a number between 1.00 and 200.00';
+    feedback.className='manual-feedback err';
+    input.focus(); return;
   }
-
-  btn.disabled = true;
-  feedback.textContent = '\u23F3 Submitting...';
-  feedback.className = 'manual-feedback';
-
-  fetch('/api/manual_result', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ value: val })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.error) {
-      feedback.textContent = '\u274C ' + data.error;
-      feedback.className = 'manual-feedback err';
+  btn.disabled=true;
+  feedback.textContent='\u23F3 Submitting...';
+  feedback.className='manual-feedback';
+  fetch('/api/manual_result',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({value:val})
+  }).then(r=>r.json()).then(data=>{
+    if(data.error){
+      feedback.textContent='\u274C '+data.error;
+      feedback.className='manual-feedback err';
     } else {
-      feedback.textContent = `\u2705 Added ${val.toFixed(2)}x \u2014 Round #${data.round_num} \u2014 Prediction: ${data.prediction.action}`;
-      feedback.className = 'manual-feedback ok';
+      feedback.textContent=`\u2705 Added ${val.toFixed(2)}x \u2014 Round #${data.round_num} \u2014 ${data.prediction.action}`;
+      feedback.className='manual-feedback ok';
       manualQueue.unshift(val);
-      if (manualQueue.length > 10) manualQueue.pop();
+      if(manualQueue.length>10) manualQueue.pop();
       renderManualRecent();
-      input.value = '';
-      beep(600, 120);
+      input.value=''; beep(600,120);
     }
-  })
-  .catch(e => {
-    feedback.textContent = '\u274C Network error: ' + e.message;
-    feedback.className = 'manual-feedback err';
-  })
-  .finally(() => {
-    btn.disabled = false;
-    input.focus();
-  });
+  }).catch(e=>{
+    feedback.textContent='\u274C Network error: '+e.message;
+    feedback.className='manual-feedback err';
+  }).finally(()=>{ btn.disabled=false; input.focus(); });
 }
 
-function renderManualRecent() {
-  const el = document.getElementById('manualRecent');
-  if (manualQueue.length === 0) {
-    el.innerHTML = '<span style="font-size:0.75rem;color:var(--dim)">None yet</span>';
-    return;
+function renderManualRecent(){
+  const el=document.getElementById('manualRecent');
+  if(manualQueue.length===0){
+    el.innerHTML='<span style="font-size:0.72rem;color:var(--dim)">None yet</span>'; return;
   }
-  el.innerHTML = manualQueue.map(v => {
-    const cls = multClass(v);
-    const colors = {b1:'#ff4466',b2:'#ffd700',b3:'#00ff88',b4:'#00ffc8'};
-    return `<span class="manual-tag" style="color:${colors[cls]};border-color:${colors[cls]}40">\u270F ${v.toFixed(2)}x</span>`;
+  const colors={b1:'#ff4466',b2:'#ffd700',b3:'#00ff88',b4:'#00ffc8'};
+  el.innerHTML=manualQueue.map(v=>{
+    const cls=multClass(v);
+    return `<span class="manual-tag" style="color:${colors[cls]};border-color:${colors[cls]}40">&#9999; ${v.toFixed(2)}x</span>`;
   }).join('');
 }
 
-function clearHistory() {
-  if (!confirm('Are you sure you want to clear predictor history and reset round count?')) return;
-  const btn = document.getElementById('resetBtn');
-  btn.disabled = true;
-  btn.textContent = '⌛ Clearing...';
-  
-  fetch('/api/clear_history', {
-    method: 'POST'
+// FIX: Clean clear history with correct emoji
+function clearHistory(){
+  if(!confirm('Are you sure you want to clear predictor history and reset round count?')) return;
+  const btn=document.getElementById('resetBtn');
+  btn.disabled=true; btn.textContent='Clearing...';
+  fetch('/api/clear_history',{method:'POST'})
+  .then(r=>r.json())
+  .then(data=>{
+    if(data.ok){
+      const grid=document.getElementById('histGrid');
+      grid.innerHTML=''; grid.dataset.renderedCount='0';
+      manualQueue.length=0; renderManualRecent();
+      chart.data.labels=[]; chart.data.datasets[0].data=[]; chart.update();
+      beep(300,200);
+    } else { alert('Error: '+(data.error||'Unknown')); }
   })
-  .then(r => r.json())
-  .then(data => {
-    if (data.ok) {
-      document.getElementById('histGrid').innerHTML = '';
-      document.getElementById('histGrid').dataset.renderedCount = '0';
-      manualQueue.length = 0;
-      renderManualRecent();
-      
-      chart.data.labels = [];
-      chart.data.datasets[0].data = [];
-      chart.update();
-      
-      beep(300, 200);
-    } else {
-      alert('Error clearing history: ' + (data.error || 'Unknown error'));
-    }
-  })
-  .catch(e => {
-    alert('Network error: ' + e.message);
-  })
-  .finally(() => {
-    btn.disabled = false;
-    btn.innerHTML = '🗑️ Clear History';
-  });
+  .catch(e=>alert('Network error: '+e.message))
+  .finally(()=>{ btn.disabled=false; btn.innerHTML='&#128465; Clear History'; });
 }
 
-// Enter key to submit
-document.getElementById('manualInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') submitManual();
+// Enter key for manual input
+document.getElementById('manualInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter') submitManual();
 });
 
 // Initial load
@@ -749,4 +635,3 @@ fetch('/api/state').then(r=>r.json()).then(updateDashboard).catch(()=>{});
 </script>
 </body>
 </html>
-
